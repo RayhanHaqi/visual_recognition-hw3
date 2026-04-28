@@ -1,23 +1,36 @@
 #!/bin/bash
+# Full pipeline: train → submit → git commit/push (single GPU, no DDP).
+# Usage: bash train.sh [bs] [lr] [wd] [workers] [epochs]
+#   bs=2  lr=1e-4  wd=1e-4  workers=4  epochs=100
+#
+# Note: this was rewritten from a multi-GPU torchrun wrapper to a
+# single-GPU pipeline script because DDP is not needed for this task.
 set -e
 
 BS=${1:-2}
 LR=${2:-1e-4}
 WD=${3:-1e-4}
-GPUS=${4:-2}
-WORKER=${5:-4}
-EPOCHS=${6:-100}
-
+WORKER=${4:-4}
+EPOCHS=${5:-100}
 RUN_NAME="bs${BS}_lr${LR}_wd${WD}"
 
 echo "=================================================="
-echo "HW3 PIPELINE: $RUN_NAME  (gpus=$GPUS)"
+echo "HW3 PIPELINE: $RUN_NAME  (single-GPU)"
 echo "=================================================="
 
-torchrun --standalone --nproc_per_node=$GPUS train.py \
-  --batch_size $BS --lr $LR --wd $WD --workers $WORKER \
-  --epochs $EPOCHS --run_name $RUN_NAME
+# Step 1: train with plain python (no torchrun / DDP)
+python train.py \
+  --batch_size "$BS" --lr "$LR" --wd "$WD" --workers "$WORKER" \
+  --epochs "$EPOCHS" --run_name "$RUN_NAME"
 
-python submission.py ./checkpoints/${RUN_NAME}_best.pth
+# Step 2: generate CodaBench submission ZIP
+python submission.py "./checkpoints/${RUN_NAME}_best.pth"
+
+# Step 3: auto-commit results and push to remote
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git add -A
+  git commit -m "pipeline: $RUN_NAME" || echo "(nothing to commit)"
+  git push || echo "(push skipped — no remote or permission)"
+fi
 
 echo "Pipeline done."

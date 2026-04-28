@@ -1,12 +1,9 @@
 datasets/
 checkpoints/
 *.pth
-log/
-submission/
 report/
 __pycache__/
 *.pyc
 *.pyo
-notes.txt
 .ipynb_checkpoints/
 HW3_plan.pdf

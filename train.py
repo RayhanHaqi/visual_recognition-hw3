@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 
@@ -97,7 +97,7 @@ def main():
         optimizer, max_lr=args.lr, epochs=args.epochs, steps_per_epoch=steps_per_epoch,
         pct_start=0.1, anneal_strategy="cos",
     )
-    scaler = GradScaler(enabled=args.amp)
+    scaler = GradScaler("cuda", enabled=args.amp)
 
     start_epoch = 0
     best_ap50 = -1.0
@@ -132,7 +132,7 @@ def main():
             images = [img.to(device, non_blocking=True) for img in images]
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
             optimizer.zero_grad(set_to_none=True)
-            with autocast(enabled=args.amp):
+            with autocast("cuda", enabled=args.amp):
                 loss_dict = model(images, targets)
                 loss = sum(loss_dict.values())
             if not torch.isfinite(loss):

@@ -22,7 +22,7 @@ def parse_args():
     p.add_argument("--min_size", type=int, default=512)
     p.add_argument("--max_size", type=int, default=1024)
     p.add_argument("--gpu", type=int, default=0)
-    p.add_argument("--student_id", type=str, default="313540001")
+
     return p.parse_args()
 
 
@@ -92,7 +92,8 @@ def main():
         json.dump(results, f)
     print(f"Wrote {len(results)} predictions to {json_path}")
 
-    zip_path = out_dir / f"{args.student_id}_HW3.zip"
+    stem = Path(args.checkpoint).stem
+    zip_path = out_dir / f"{stem}_HW3.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(json_path, arcname="test-results.json")
     print(f"Zipped submission to {zip_path}")

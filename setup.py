@@ -1,20 +1,48 @@
 import os
 import subprocess
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+GDRIVE_FILE_ID = "1uCnJ3LrsBHOeQoJDoe4Yg8H32VuQJodv"
 EXPECTED_TRAIN = 209
 EXPECTED_TEST = 101
 
 
-def rename_typo_folder():
-    typo = ROOT / "datesets"
-    correct = ROOT / "datasets"
-    if typo.exists() and not correct.exists():
-        print(f"Renaming {typo.name} -> {correct.name}")
-        typo.rename(correct)
-    elif typo.exists() and correct.exists():
-        print(f"WARN: both '{typo.name}' and '{correct.name}' exist. Manual review needed.")
+def download_dataset():
+    datasets_dir = ROOT / "datasets"
+    if datasets_dir.exists():
+        print("datasets/ already exists, skipping download.")
+        return
+
+    zip_path = ROOT / "datasets.zip"
+    before_dirs = set(p.name for p in ROOT.iterdir() if p.is_dir())
+
+    print(f"Downloading from Google Drive (id={GDRIVE_FILE_ID})...")
+    try:
+        subprocess.run(
+            ["gdown", "--id", GDRIVE_FILE_ID, "-O", str(zip_path)],
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR: gdown failed ({e.returncode}). Make sure gdown is installed.")
+        raise
+
+    print("Extracting...")
+    with zipfile.ZipFile(zip_path, "r") as z:
+        z.extractall(ROOT)
+
+    after_dirs = set(p.name for p in ROOT.iterdir() if p.is_dir())
+    new_dirs = after_dirs - before_dirs
+    for name in new_dirs:
+        extracted = ROOT / name
+        if (extracted / "train").is_dir() or (extracted / "test_release").is_dir():
+            print(f"Renaming {name} -> datasets")
+            extracted.rename(datasets_dir)
+            break
+
+    zip_path.unlink(missing_ok=True)
+    print("Download complete.")
 
 
 def install_requirements():
@@ -29,10 +57,21 @@ def install_requirements():
 
 
 def chmod_scripts():
-    for name in ("train.sh", "train-runpod.sh"):
+    for name in ("train.sh", "train-v2.sh", "train-runpod.sh"):
         p = ROOT / name
         if p.exists():
             os.chmod(p, 0o755)
+
+
+def configure_git():
+    print("Configuring git globals...")
+    for cmd in (
+        ["git", "config", "--global", "user.name", "Rayhan"],
+        ["git", "config", "--global", "user.email", "rayhanhaqi@github.com"],
+        ["git", "config", "--global", "credential.helper", "store"],
+    ):
+        subprocess.run(cmd, check=False)
+    print("Git configured.")
 
 
 def sanity_check():
@@ -60,8 +99,9 @@ def sanity_check():
 
 def main():
     print("=== HW3 Setup ===")
-    rename_typo_folder()
+    download_dataset()
     install_requirements()
+    configure_git()
     chmod_scripts()
     sanity_check()
     print("Setup complete.")
