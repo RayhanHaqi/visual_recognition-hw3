@@ -25,7 +25,11 @@ python train_v2.py \
   --epochs "$EPOCHS" --run_name "$RUN_NAME"
 
 # Step 2: generate CodaBench submission ZIP
-python submission.py "./checkpoints/${RUN_NAME}_best.pth"
+python submission.py \
+    "./checkpoints/${RUN_NAME}_best.pth" \
+    --min_size 800 --max_size 1333 \
+    --anchor_sizes "8,16,32,64,128" \
+    --box_detections_per_img 500
 
 # Step 3: auto-commit results and push to remote
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then

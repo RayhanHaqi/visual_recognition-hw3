@@ -263,6 +263,12 @@ def main():
                     current_lr, elapsed,
                 ])
 
+            model_args = {
+                "min_size": args.min_size,
+                "max_size": args.max_size,
+                "anchor_sizes": ((8,), (16,), (32,), (64,), (128,)),
+                "box_detections_per_img": 500,
+            }
             last_ckpt = {
                 "model": target_module.state_dict(),
                 "ema": ema.shadow if ema is not None else None,
@@ -271,6 +277,7 @@ def main():
                 "epoch": epoch,
                 "best_ap50": best_ap50,
                 "args": vars(args),
+                "model_args": model_args,
             }
             if not args.best_only:
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")

@@ -17,7 +17,7 @@ echo "  RUNPOD v2 PIPELINE: $RUN_NAME"
 echo "=================================================="
 
 if [ -z "$GH_TOKEN" ]; then
-    read -rsp "GitHub token (input hidden): " GH_TOKEN
+    read -rp "GitHub token: " GH_TOKEN
     echo
 fi
 
@@ -34,7 +34,11 @@ python train_v2.py \
   --epochs "$EPOCHS" --run_name "$RUN_NAME" --best_only && \
 
 echo "[3/4] Generating submission..." && \
-python submission.py "./checkpoints/${RUN_NAME}_best.pth" && \
+python submission.py \
+    "./checkpoints/${RUN_NAME}_best.pth" \
+    --min_size 800 --max_size 1333 \
+    --anchor_sizes "8,16,32,64,128" \
+    --box_detections_per_img 500 && \
 rm -rf ./checkpoints/* && \
 
 echo "[4/4] Saving to GitHub..." && \

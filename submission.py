@@ -21,6 +21,9 @@ def parse_args():
     p.add_argument("--mask_thresh", type=float, default=0.5)
     p.add_argument("--min_size", type=int, default=512)
     p.add_argument("--max_size", type=int, default=1024)
+    p.add_argument("--anchor_sizes", type=str, default=None,
+                   help="Comma-separated sizes, e.g. '8,16,32,64,128'")
+    p.add_argument("--box_detections_per_img", type=int, default=100)
     p.add_argument("--gpu", type=int, default=0)
 
     return p.parse_args()
@@ -43,9 +46,39 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    model = build_maskrcnn(num_classes=5, pretrained=False, min_size=args.min_size, max_size=args.max_size)
     ckpt = torch.load(args.checkpoint, map_location=device)
     state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+
+    train_args = {}
+    if isinstance(ckpt, dict) and "args" in ckpt:
+        train_args = ckpt["args"]
+
+    if isinstance(ckpt, dict) and "model_args" in ckpt:
+        m = ckpt["model_args"]
+        min_size = m.get("min_size", args.min_size)
+        max_size = m.get("max_size", args.max_size)
+        anchor_sizes = m.get("anchor_sizes", None)
+        bdpi = m.get("box_detections_per_img", 100)
+    else:
+        min_size = train_args.get("min_size", args.min_size)
+        max_size = train_args.get("max_size", args.max_size)
+        anchor_sizes = train_args.get("anchor_sizes")
+        bdpi = train_args.get("box_detections_per_img") or 100
+
+    if args.anchor_sizes is not None:
+        anchor_sizes = tuple((int(x),) for x in args.anchor_sizes.split(","))
+
+    model_kwargs = {
+        "num_classes": 5, "pretrained": False,
+        "min_size": min_size, "max_size": max_size,
+        "box_detections_per_img": bdpi,
+    }
+    if anchor_sizes is not None:
+        model_kwargs["anchor_sizes"] = anchor_sizes
+
+    print(f"Model config: min_size={min_size}, max_size={max_size}, anchors={'custom' if anchor_sizes else 'default'}, box_detections={bdpi}")
+
+    model = build_maskrcnn(**model_kwargs)
     model.load_state_dict(state)
     model.to(device).eval()
 

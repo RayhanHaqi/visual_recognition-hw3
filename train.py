@@ -165,6 +165,12 @@ def main():
                 "epoch": epoch,
                 "best_ap50": best_ap50,
                 "args": vars(args),
+                "model_args": {
+                    "min_size": args.min_size,
+                    "max_size": args.max_size,
+                    "anchor_sizes": None,
+                    "box_detections_per_img": 100,
+                },
             }
             if not args.best_only:
                 torch.save(ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")

@@ -17,7 +17,7 @@ echo "  RUNPOD PIPELINE: $RUN_NAME"
 echo "=================================================="
 
 if [ -z "$GH_TOKEN" ]; then
-    read -rsp "GitHub token (input hidden): " GH_TOKEN
+    read -rp "GitHub token: " GH_TOKEN
     echo
 fi
 
