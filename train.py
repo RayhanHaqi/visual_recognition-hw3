@@ -105,7 +105,10 @@ def main():
 
     coco_gt = None
     if is_main():
+        t0_gt = time.time()
+        print("Building COCO ground truth for validation...")
         coco_gt = build_coco_gt(val_ds)
+        print(f"  done in {time.time() - t0_gt:.1f}s")
 
     log_file = Path(args.log_path) / f"{args.run_name}.csv"
     if is_main() and not log_file.exists():
@@ -143,7 +146,7 @@ def main():
             ap_metrics = run_validation(model.module if distributed else model, val_loader, device, coco_gt)
             elapsed = time.time() - t0
             current_lr = optimizer.param_groups[0]["lr"]
-            print(f"[ep {epoch:03d}] loss={train_loss:.4f}  AP={ap_metrics['AP']:.4f}  AP50={ap_metrics['AP50']:.4f}  AP75={ap_metrics['AP75']:.4f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
+            print(f"[ep {epoch:03d}] loss={train_loss:.4f}  AP={ap_metrics['AP']:.4f}  AP50={ap_metrics['AP50']:.4f}  AP75={ap_metrics['AP75']:.4f}  lr={current_lr:.2e}  ({elapsed:.1f}s total)")
             with log_file.open("a", newline="") as f:
                 csv.writer(f).writerow([epoch, train_loss, ap_metrics["AP"], ap_metrics["AP50"], ap_metrics["AP75"], current_lr, elapsed])
 

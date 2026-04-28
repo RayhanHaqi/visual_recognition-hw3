@@ -96,7 +96,7 @@ def chmod_scripts():
             os.chmod(p, 0o755)
 
 
-def configure_git():
+def configure_git(github_token=""):
     print("Configuring git globals...")
     for cmd in (
         ["git", "config", "--global", "user.name", "Rayhan"],
@@ -104,6 +104,20 @@ def configure_git():
         ["git", "config", "--global", "credential.helper", "store"],
     ):
         subprocess.run(cmd, check=False)
+
+    if github_token:
+        print("Embedding GitHub token into remote URL for auto-push...")
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(ROOT), capture_output=True, text=True,
+        )
+        remote = result.stdout.strip()
+        if remote.startswith("https://") and "@" not in remote:
+            patched = remote.replace("https://", f"https://{github_token}@")
+            subprocess.run(["git", "remote", "set-url", "origin", patched], cwd=str(ROOT), check=False)
+            print("Token embedded in remote URL.")
+        else:
+            print("Remote already has auth, skipping.")
 
     print("Setting up git LFS for submission ZIPs...")
     subprocess.run(["apt-get", "update", "-qq"], check=False)
@@ -138,10 +152,15 @@ def sanity_check():
 
 
 def main():
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--github-token", type=str, default="", help="GitHub personal access token for auto-push")
+    opts = p.parse_known_args()[0]
+
     print("=== HW3 Setup ===")
     install_requirements()
     download_dataset()
-    configure_git()
+    configure_git(opts.github_token)
     chmod_scripts()
     sanity_check()
     print("Setup complete.")

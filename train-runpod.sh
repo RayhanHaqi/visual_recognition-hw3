@@ -1,7 +1,7 @@
 #!/bin/bash
 # Full RunPod pipeline: setup → train → submit → git push → kill pod.
-# Usage: bash train-runpod.sh [bs] [lr] [wd] [workers] [epochs]
-#   bs=2  lr=1e-4  wd=1e-4  workers=4  epochs=100
+# Usage: bash train-runpod.sh [bs] [lr] [wd] [workers] [epochs] [github_token]
+#   bs=2  lr=1e-4  wd=1e-4  workers=4  epochs=100  github_token=
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
@@ -10,6 +10,11 @@ LR=${2:-1e-4}
 WD=${3:-1e-4}
 WORKER=${4:-4}
 EPOCHS=${5:-100}
+GH_TOKEN=${6:-}
+SETUP_EXTRA=""
+if [ -n "$GH_TOKEN" ]; then
+    SETUP_EXTRA="--github-token $GH_TOKEN"
+fi
 RUN_NAME="bs${BS}_lr${LR}_wd${WD}_ep${EPOCHS}_runpod"
 
 echo "=================================================="
@@ -17,7 +22,7 @@ echo "  RUNPOD PIPELINE: $RUN_NAME"
 echo "=================================================="
 
 echo "[1/4] Setup..."
-python setup.py && \
+python setup.py $SETUP_EXTRA && \
 
 echo "[2/4] Training..." && \
 python train.py \
