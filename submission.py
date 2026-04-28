@@ -59,11 +59,13 @@ def main():
         max_size = m.get("max_size", args.max_size)
         anchor_sizes = m.get("anchor_sizes", None)
         bdpi = m.get("box_detections_per_img", 100)
+        backbone = m.get("backbone", "resnet50")
     else:
         min_size = train_args.get("min_size", args.min_size)
         max_size = train_args.get("max_size", args.max_size)
         anchor_sizes = train_args.get("anchor_sizes")
         bdpi = train_args.get("box_detections_per_img") or 100
+        backbone = train_args.get("backbone", "resnet50")
 
     if args.anchor_sizes is not None:
         anchor_sizes = tuple((int(x),) for x in args.anchor_sizes.split(","))
@@ -72,11 +74,12 @@ def main():
         "num_classes": 5, "pretrained": False,
         "min_size": min_size, "max_size": max_size,
         "box_detections_per_img": bdpi,
+        "backbone": backbone,
     }
     if anchor_sizes is not None:
         model_kwargs["anchor_sizes"] = anchor_sizes
 
-    print(f"Model config: min_size={min_size}, max_size={max_size}, anchors={'custom' if anchor_sizes else 'default'}, box_detections={bdpi}")
+    print(f"Model config: backbone={backbone} min_size={min_size}, max_size={max_size}, anchors={'custom' if anchor_sizes else 'default'}, box_detections={bdpi}")
 
     model = build_maskrcnn(**model_kwargs)
     model.load_state_dict(state)

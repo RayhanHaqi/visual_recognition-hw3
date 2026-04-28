@@ -53,6 +53,7 @@ def parse_args():
     p.add_argument("--tta", action="store_true", default=False)
     p.add_argument("--multi_scale", action="store_true", default=False)
     p.add_argument("--best_only", action="store_true", default=False, help="Only save best checkpoint, no _last or top-k")
+    p.add_argument("--backbone", type=str, default="resnet50", choices=["resnet50", "convnext_base"])
     return p.parse_args()
 
 
@@ -165,6 +166,7 @@ def main():
         min_size=min_size_arg, max_size=args.max_size,
         anchor_sizes=((8,), (16,), (32,), (64,), (128,)),
         box_detections_per_img=500,
+        backbone=args.backbone,
     )
     model.to(device)
     if is_main():
@@ -268,6 +270,7 @@ def main():
                 "max_size": args.max_size,
                 "anchor_sizes": ((8,), (16,), (32,), (64,), (128,)),
                 "box_detections_per_img": 500,
+                "backbone": args.backbone,
             }
             last_ckpt = {
                 "model": target_module.state_dict(),

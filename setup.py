@@ -88,6 +88,24 @@ def install_requirements():
     except subprocess.CalledProcessError as e:
         print(f"WARN: pip install returned {e.returncode}")
 
+    _upgrade_pytorch_if_blackwell()
+
+
+def _upgrade_pytorch_if_blackwell():
+    try:
+        import torch
+    except ImportError:
+        return
+    if not torch.cuda.is_available():
+        return
+    cap = torch.cuda.get_device_capability()
+    if cap is not None and cap[0] >= 12:
+        print(f"RTX 5090 detected (sm_{cap[0]}{cap[1]}). Upgrading PyTorch for Blackwell support...")
+        subprocess.run(
+            ["pip", "install", "-q", "--upgrade", "torch", "torchvision", "timm"],
+            check=False,
+        )
+
 
 def chmod_scripts():
     for name in ("train.sh", "train-v2.sh", "train-runpod.sh", "train-runpod-v2.sh"):
