@@ -31,13 +31,13 @@ python setup.py && \
 echo "[2/4] Training (v2)..." && \
 python train_v2.py \
   --batch_size "$BS" --lr "$LR" --wd "$WD" --workers "$WORKER" \
-  --epochs "$EPOCHS" --run_name "$RUN_NAME" && \
+  --epochs "$EPOCHS" --run_name "$RUN_NAME" --best_only && \
 
 echo "[3/4] Generating submission..." && \
 python submission.py "./checkpoints/${RUN_NAME}_best.pth" && \
+rm -rf ./checkpoints/* && \
 
 echo "[4/4] Saving to GitHub..." && \
-rm -f ./checkpoints/*_last.pth && \
 git add -A && \
 git commit -m "Auto-save: Done training $RUN_NAME" && \
 git pull --rebase && \

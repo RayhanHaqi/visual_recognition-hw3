@@ -52,6 +52,7 @@ def parse_args():
     p.add_argument("--save_top_k", type=int, default=3)
     p.add_argument("--tta", action="store_true", default=False)
     p.add_argument("--multi_scale", action="store_true", default=False)
+    p.add_argument("--best_only", action="store_true", default=False, help="Only save best checkpoint, no _last or top-k")
     return p.parse_args()
 
 
@@ -262,7 +263,8 @@ def main():
                 "best_ap50": best_ap50,
                 "args": vars(args),
             }
-            torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
+            if not args.best_only:
+                torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
             if ap_metrics["AP50"] > best_ap50:
                 best_ap50 = ap_metrics["AP50"]
@@ -280,15 +282,16 @@ def main():
             else:
                 epochs_since_improve += 1
 
-            cand_path = Path(args.save_path) / f"{args.run_name}_top_ep{epoch:03d}_ap{ap_metrics['AP50']:.4f}.pth"
-            top_k_ckpts.append((ap_metrics["AP50"], cand_path))
-            top_k_ckpts.sort(key=lambda x: x[0], reverse=True)
-            if (ap_metrics["AP50"], cand_path) in top_k_ckpts[:args.save_top_k]:
-                torch.save(last_ckpt, cand_path)
-            for _, evicted_path in top_k_ckpts[args.save_top_k:]:
-                if evicted_path.exists():
-                    evicted_path.unlink()
-            top_k_ckpts = top_k_ckpts[:args.save_top_k]
+            if not args.best_only:
+                cand_path = Path(args.save_path) / f"{args.run_name}_top_ep{epoch:03d}_ap{ap_metrics['AP50']:.4f}.pth"
+                top_k_ckpts.append((ap_metrics["AP50"], cand_path))
+                top_k_ckpts.sort(key=lambda x: x[0], reverse=True)
+                if (ap_metrics["AP50"], cand_path) in top_k_ckpts[:args.save_top_k]:
+                    torch.save(last_ckpt, cand_path)
+                for _, evicted_path in top_k_ckpts[args.save_top_k:]:
+                    if evicted_path.exists():
+                        evicted_path.unlink()
+                top_k_ckpts = top_k_ckpts[:args.save_top_k]
 
         if distributed:
             stop_signal = torch.tensor([1 if epochs_since_improve >= args.patience else 0], device=device)

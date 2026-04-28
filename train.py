@@ -44,6 +44,7 @@ def parse_args():
     p.add_argument("--patience", type=int, default=10)
     p.add_argument("--amp", action="store_true", default=True)
     p.add_argument("--no_amp", dest="amp", action="store_false")
+    p.add_argument("--best_only", action="store_true", default=False)
     return p.parse_args()
 
 
@@ -159,7 +160,8 @@ def main():
                 "best_ap50": best_ap50,
                 "args": vars(args),
             }
-            torch.save(ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
+            if not args.best_only:
+                torch.save(ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
             if ap_metrics["AP50"] > best_ap50:
                 best_ap50 = ap_metrics["AP50"]
                 ckpt["best_ap50"] = best_ap50
