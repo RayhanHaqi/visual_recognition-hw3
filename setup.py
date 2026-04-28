@@ -1,5 +1,6 @@
 import os
 import subprocess
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -15,22 +16,30 @@ def download_dataset():
         print("datasets/ already exists, skipping download.")
         return
 
-    zip_path = ROOT / "datasets.zip"
-    before_dirs = set(p.name for p in ROOT.iterdir() if p.is_dir())
-
-    print(f"Downloading from Google Drive (id={GDRIVE_FILE_ID})...")
-    try:
-        subprocess.run(
-            ["gdown", f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}", "-O", str(zip_path)],
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        print(f"ERROR: gdown failed ({e.returncode}). Make sure gdown is installed.")
-        raise
+    archive_path = ROOT / "datasets.zip"
+    if not archive_path.exists():
+        print(f"Downloading from Google Drive (id={GDRIVE_FILE_ID})...")
+        try:
+            subprocess.run(
+                ["gdown", f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}", "-O", str(archive_path)],
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"ERROR: gdown failed ({e.returncode}). Make sure gdown is installed.")
+            raise
+    else:
+        print("Archive already downloaded, skipping.")
 
     print("Extracting...")
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(ROOT)
+    if zipfile.is_zipfile(archive_path):
+        with zipfile.ZipFile(archive_path, "r") as z:
+            z.extractall(ROOT)
+    elif tarfile.is_tarfile(archive_path):
+        with tarfile.open(archive_path) as t:
+            t.extractall(ROOT)
+    else:
+        print(f"ERROR: unknown archive format for {archive_path.name}")
+        raise SystemExit(1)
 
     after_dirs = set(p.name for p in ROOT.iterdir() if p.is_dir())
     new_dirs = after_dirs - before_dirs
@@ -38,10 +47,13 @@ def download_dataset():
         extracted = ROOT / name
         if (extracted / "train").is_dir() or (extracted / "test_release").is_dir():
             print(f"Renaming {name} -> datasets")
+            if datasets_dir.exists():
+                import shutil
+                shutil.rmtree(datasets_dir)
             extracted.rename(datasets_dir)
             break
 
-    zip_path.unlink(missing_ok=True)
+    archive_path.unlink(missing_ok=True)
     print("Download complete.")
 
 
