@@ -200,7 +200,9 @@ def main():
             print("Loaded cached COCO ground truth.")
         else:
             coco_gt = build_coco_gt(val_ds)
-            cache_path.write_bytes(pickle.dumps(coco_gt))
+            tmp = cache_path.with_suffix(".tmp")
+            tmp.write_bytes(pickle.dumps(coco_gt))
+            tmp.rename(cache_path)
 
     log_file = Path(args.log_path) / f"{args.run_name}.csv"
     if is_main() and not log_file.exists():
