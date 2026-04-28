@@ -21,7 +21,7 @@ def download_dataset():
     print(f"Downloading from Google Drive (id={GDRIVE_FILE_ID})...")
     try:
         subprocess.run(
-            ["gdown", "--id", GDRIVE_FILE_ID, "-O", str(zip_path)],
+            ["gdown", f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}", "-O", str(zip_path)],
             check=True,
         )
     except subprocess.CalledProcessError as e:
