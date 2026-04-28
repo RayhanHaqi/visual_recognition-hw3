@@ -1,0 +1,14 @@
+torch
+torchvision
+pycocotools
+tifffile
+imagecodecs
+albumentations
+opencv-python
+numpy
+pandas
+matplotlib
+tqdm
+pyyaml
+gdown
+scikit-learn
