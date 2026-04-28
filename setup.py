@@ -16,7 +16,7 @@ def download_dataset():
         print("datasets/ already exists, skipping download.")
         return
 
-    archive_path = ROOT / "datasets.zip"
+    archive_path = ROOT / "datasets.tar"
     if not archive_path.exists():
         print(f"Downloading from Google Drive (id={GDRIVE_FILE_ID})...")
         try:
@@ -30,30 +30,50 @@ def download_dataset():
     else:
         print("Archive already downloaded, skipping.")
 
+    tmp_dir = ROOT / "datasets_tmp"
+    if tmp_dir.exists():
+        import shutil
+        shutil.rmtree(tmp_dir)
+    tmp_dir.mkdir()
+
     print("Extracting...")
-    before_dirs = set(p.name for p in ROOT.iterdir() if p.is_dir())
     if zipfile.is_zipfile(archive_path):
         with zipfile.ZipFile(archive_path, "r") as z:
-            z.extractall(ROOT)
+            z.extractall(tmp_dir)
     elif tarfile.is_tarfile(archive_path):
         with tarfile.open(archive_path) as t:
-            t.extractall(ROOT)
+            t.extractall(tmp_dir)
     else:
-        print(f"ERROR: unknown archive format for {archive_path.name}")
+        tmp_dir.rmdir()
+        archive_path.unlink(missing_ok=True)
+        print(f"ERROR: unknown archive format, deleted bad archive. Re-run setup.")
         raise SystemExit(1)
 
-    after_dirs = set(p.name for p in ROOT.iterdir() if p.is_dir())
-    new_dirs = after_dirs - before_dirs
-    for name in new_dirs:
-        extracted = ROOT / name
-        if (extracted / "train").is_dir() or (extracted / "test_release").is_dir():
-            print(f"Renaming {name} -> datasets")
-            if datasets_dir.exists():
-                import shutil
-                shutil.rmtree(datasets_dir)
-            extracted.rename(datasets_dir)
+    train_src = tmp_dir / "train"
+    test_src = tmp_dir / "test_release"
+    ids_src = tmp_dir / "test_image_name_to_ids.json"
+
+    for child in tmp_dir.iterdir():
+        d = child if child.is_dir() else child.parent
+        if (tmp_dir / child.name / "train").is_dir():
+            train_src = tmp_dir / child.name / "train"
+            test_src = tmp_dir / child.name / "test_release"
+            ids_src = tmp_dir / child.name / "test_image_name_to_ids.json"
             break
 
+    if not train_src.is_dir():
+        print("ERROR: could not find train/ in extracted archive")
+        import shutil
+        shutil.rmtree(tmp_dir)
+        raise SystemExit(1)
+
+    datasets_dir.mkdir()
+    train_src.rename(datasets_dir / "train")
+    test_src.rename(datasets_dir / "test_release")
+    if ids_src.exists():
+        ids_src.rename(datasets_dir / "test_image_name_to_ids.json")
+    import shutil
+    shutil.rmtree(tmp_dir)
     archive_path.unlink(missing_ok=True)
     print("Download complete.")
 
@@ -86,9 +106,8 @@ def configure_git():
         subprocess.run(cmd, check=False)
 
     print("Setting up git LFS for submission ZIPs...")
-    attr_path = ROOT / ".gitattributes"
-    if not attr_path.exists():
-        attr_path.write_text("submission/*.zip filter=lfs diff=lfs merge=lfs -text\n")
+    subprocess.run(["apt-get", "update", "-qq"], check=False)
+    subprocess.run(["apt-get", "install", "-qq", "-y", "git-lfs"], check=False)
     subprocess.run(["git", "lfs", "install"], cwd=str(ROOT), check=False)
     subprocess.run(["git", "lfs", "track", "submission/*.zip"], cwd=str(ROOT), check=False)
 
