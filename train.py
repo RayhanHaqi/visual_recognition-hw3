@@ -104,9 +104,16 @@ def main():
     best_ap50 = -1.0
     epochs_since_improve = 0
 
+    import pickle
     coco_gt = None
     if is_main():
-        coco_gt = build_coco_gt(val_ds)
+        cache_path = Path(args.data_path).parent / f"coco_gt_s{args.seed}_f{args.val_frac}.pkl"
+        if cache_path.exists():
+            coco_gt = pickle.loads(cache_path.read_bytes())
+            print("Loaded cached COCO ground truth.")
+        else:
+            coco_gt = build_coco_gt(val_ds)
+            cache_path.write_bytes(pickle.dumps(coco_gt))
 
     log_file = Path(args.log_path) / f"{args.run_name}.csv"
     if is_main() and not log_file.exists():
