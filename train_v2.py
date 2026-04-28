@@ -240,12 +240,7 @@ def main():
 
         ap_metrics = {"AP": 0.0, "AP50": 0.0, "AP75": 0.0}
         if is_main():
-            backup = ema.apply_to(target_module) if ema is not None else None
             ap_metrics = run_validation(target_module, val_loader, device, coco_gt, tta=args.tta)
-            validated_state = None
-            if ema is not None:
-                validated_state = {k: v.detach().cpu().clone() for k, v in target_module.state_dict().items()}
-                ema.restore(target_module, backup)
 
             elapsed = time.time() - t0
             current_lr = optimizer.param_groups[0]["lr"]
@@ -269,14 +264,18 @@ def main():
             }
             torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
-            val_ckpt = dict(last_ckpt)
-            if validated_state is not None:
-                val_ckpt["model"] = validated_state
-
             if ap_metrics["AP50"] > best_ap50:
                 best_ap50 = ap_metrics["AP50"]
-                val_ckpt["best_ap50"] = best_ap50
-                torch.save(val_ckpt, Path(args.save_path) / f"{args.run_name}_best.pth")
+                if ema is not None:
+                    backup = ema.apply_to(target_module)
+                    best_ckpt = dict(last_ckpt)
+                    best_ckpt["model"] = {k: v.cpu().clone() for k, v in target_module.state_dict().items()}
+                    best_ckpt["best_ap50"] = best_ap50
+                    torch.save(best_ckpt, Path(args.save_path) / f"{args.run_name}_best.pth")
+                    ema.restore(target_module, backup)
+                else:
+                    last_ckpt["best_ap50"] = best_ap50
+                    torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_best.pth")
                 epochs_since_improve = 0
             else:
                 epochs_since_improve += 1
@@ -285,7 +284,7 @@ def main():
             top_k_ckpts.append((ap_metrics["AP50"], cand_path))
             top_k_ckpts.sort(key=lambda x: x[0], reverse=True)
             if (ap_metrics["AP50"], cand_path) in top_k_ckpts[:args.save_top_k]:
-                torch.save(val_ckpt, cand_path)
+                torch.save(last_ckpt, cand_path)
             for _, evicted_path in top_k_ckpts[args.save_top_k:]:
                 if evicted_path.exists():
                     evicted_path.unlink()
