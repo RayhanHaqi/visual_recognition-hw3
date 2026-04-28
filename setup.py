@@ -31,6 +31,7 @@ def download_dataset():
         print("Archive already downloaded, skipping.")
 
     print("Extracting...")
+    before_dirs = set(p.name for p in ROOT.iterdir() if p.is_dir())
     if zipfile.is_zipfile(archive_path):
         with zipfile.ZipFile(archive_path, "r") as z:
             z.extractall(ROOT)
