@@ -107,8 +107,8 @@ def sanity_check():
 
 def main():
     print("=== HW3 Setup ===")
-    download_dataset()
     install_requirements()
+    download_dataset()
     configure_git()
     chmod_scripts()
     sanity_check()
