@@ -1,6 +1,6 @@
 #!/bin/bash
-# Full RunPod pipeline: setup → train → submit → git push → kill pod.
-# Usage: bash train-runpod.sh [bs] [lr] [wd] [workers] [epochs]
+# Full RunPod pipeline (v2): setup → train_v2 → submit → git push → kill pod.
+# Usage: bash train-runpod-v2.sh [bs] [lr] [wd] [workers] [epochs]
 #   bs=2  lr=1e-4  wd=1e-4  workers=4  epochs=100
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
@@ -10,17 +10,17 @@ LR=${2:-1e-4}
 WD=${3:-1e-4}
 WORKER=${4:-4}
 EPOCHS=${5:-100}
-RUN_NAME="bs${BS}_lr${LR}_wd${WD}_ep${EPOCHS}_runpod"
+RUN_NAME="v2_bs${BS}_lr${LR}_wd${WD}_ep${EPOCHS}_runpod"
 
 echo "=================================================="
-echo "  RUNPOD PIPELINE: $RUN_NAME"
+echo "  RUNPOD v2 PIPELINE: $RUN_NAME"
 echo "=================================================="
 
 echo "[1/4] Setup..."
 python setup.py && \
 
-echo "[2/4] Training..." && \
-python train.py \
+echo "[2/4] Training (v2)..." && \
+python train_v2.py \
   --batch_size "$BS" --lr "$LR" --wd "$WD" --workers "$WORKER" \
   --epochs "$EPOCHS" --run_name "$RUN_NAME" && \
 

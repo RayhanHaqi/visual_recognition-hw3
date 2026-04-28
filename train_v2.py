@@ -11,6 +11,7 @@ from torch.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 from torchvision.ops import nms
+from tqdm import tqdm
 
 from data.dataset import (
     CellInstanceDataset,
@@ -46,7 +47,6 @@ def parse_args():
     p.add_argument("--patience", type=int, default=15)
     p.add_argument("--amp", action="store_true", default=True)
     p.add_argument("--no_amp", dest="amp", action="store_false")
-    p.add_argument("--resume", type=str, default="")
     p.add_argument("--ema_decay", type=float, default=0.9998)
     p.add_argument("--grad_clip", type=float, default=10.0)
     p.add_argument("--save_top_k", type=int, default=3)
@@ -190,18 +190,6 @@ def main():
     epochs_since_improve = 0
     top_k_ckpts = []
 
-    if args.resume and Path(args.resume).exists():
-        ckpt = torch.load(args.resume, map_location=device)
-        target_module.load_state_dict(ckpt["model"])
-        optimizer.load_state_dict(ckpt["optimizer"])
-        scheduler.load_state_dict(ckpt["scheduler"])
-        start_epoch = ckpt.get("epoch", 0) + 1
-        best_ap50 = ckpt.get("best_ap50", -1.0)
-        if ema is not None and ckpt.get("ema") is not None:
-            for n, p in ckpt["ema"].items():
-                if n in ema.shadow:
-                    ema.shadow[n] = p.to(ema.shadow[n].device)
-
     coco_gt = None
     if is_main():
         coco_gt = build_coco_gt(val_ds)
@@ -223,7 +211,8 @@ def main():
         running_loss = 0.0
         running_components = {k: 0.0 for k in LOSS_KEYS}
         n_batches = 0
-        for images, targets in train_loader:
+        pbar = tqdm(train_loader, desc=f"[ep {epoch:03d}] train", leave=False, disable=not is_main())
+        for images, targets in pbar:
             images = [img.to(device, non_blocking=True) for img in images]
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
             optimizer.zero_grad(set_to_none=True)
@@ -245,6 +234,7 @@ def main():
                 if k in loss_dict:
                     running_components[k] += float(loss_dict[k].detach())
             n_batches += 1
+            pbar.set_postfix(loss=f"{running_loss/max(1,n_batches):.4f}")
         train_loss = running_loss / max(1, n_batches)
         comp_means = {k: running_components[k] / max(1, n_batches) for k in LOSS_KEYS}
 
@@ -319,7 +309,8 @@ def main():
 def run_validation(model, loader, device, coco_gt, tta=False):
     model.eval()
     predictions = {}
-    for idx, (images, targets) in enumerate(loader):
+    pbar = tqdm(loader, desc="validate", leave=False, disable=not is_main())
+    for idx, (images, targets) in enumerate(pbar):
         images = [img.to(device, non_blocking=True) for img in images]
         outputs = model(images)
         if tta:

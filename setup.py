@@ -57,7 +57,7 @@ def install_requirements():
 
 
 def chmod_scripts():
-    for name in ("train.sh", "train-v2.sh", "train-runpod.sh"):
+    for name in ("train.sh", "train-v2.sh", "train-runpod.sh", "train-runpod-v2.sh"):
         p = ROOT / name
         if p.exists():
             os.chmod(p, 0o755)
@@ -71,6 +71,14 @@ def configure_git():
         ["git", "config", "--global", "credential.helper", "store"],
     ):
         subprocess.run(cmd, check=False)
+
+    print("Setting up git LFS for submission ZIPs...")
+    attr_path = ROOT / ".gitattributes"
+    if not attr_path.exists():
+        attr_path.write_text("submission/*.zip filter=lfs diff=lfs merge=lfs -text\n")
+    subprocess.run(["git", "lfs", "install"], cwd=str(ROOT), check=False)
+    subprocess.run(["git", "lfs", "track", "submission/*.zip"], cwd=str(ROOT), check=False)
+
     print("Git configured.")
 
 

@@ -11,6 +11,7 @@ import torch
 from torch.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
+from tqdm import tqdm
 
 from data.dataset import (
     CellInstanceDataset,
@@ -38,12 +39,11 @@ def parse_args():
     p.add_argument("--gpu", type=int, default=0)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--val_frac", type=float, default=0.15)
-    p.add_argument("--min_size", type=int, default=512)
-    p.add_argument("--max_size", type=int, default=1024)
+    p.add_argument("--min_size", type=int, default=384)
+    p.add_argument("--max_size", type=int, default=768)
     p.add_argument("--patience", type=int, default=10)
     p.add_argument("--amp", action="store_true", default=True)
     p.add_argument("--no_amp", dest="amp", action="store_false")
-    p.add_argument("--resume", type=str, default="")
     return p.parse_args()
 
 
@@ -103,15 +103,6 @@ def main():
     best_ap50 = -1.0
     epochs_since_improve = 0
 
-    if args.resume and Path(args.resume).exists():
-        ckpt = torch.load(args.resume, map_location=device)
-        target = model.module if distributed else model
-        target.load_state_dict(ckpt["model"])
-        optimizer.load_state_dict(ckpt["optimizer"])
-        scheduler.load_state_dict(ckpt["scheduler"])
-        start_epoch = ckpt.get("epoch", 0) + 1
-        best_ap50 = ckpt.get("best_ap50", -1.0)
-
     coco_gt = None
     if is_main():
         coco_gt = build_coco_gt(val_ds)
@@ -128,7 +119,8 @@ def main():
         t0 = time.time()
         running_loss = 0.0
         n_batches = 0
-        for images, targets in train_loader:
+        pbar = tqdm(train_loader, desc=f"[ep {epoch:03d}] train", leave=False, disable=not is_main())
+        for images, targets in pbar:
             images = [img.to(device, non_blocking=True) for img in images]
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
             optimizer.zero_grad(set_to_none=True)
@@ -143,6 +135,7 @@ def main():
             scheduler.step()
             running_loss += float(loss.detach())
             n_batches += 1
+            pbar.set_postfix(loss=f"{running_loss/max(1,n_batches):.4f}")
         train_loss = running_loss / max(1, n_batches)
 
         ap_metrics = {"AP": 0.0, "AP50": 0.0, "AP75": 0.0}
@@ -190,7 +183,8 @@ def main():
 def run_validation(model, loader, device, coco_gt):
     model.eval()
     predictions = {}
-    for idx, (images, targets) in enumerate(loader):
+    pbar = tqdm(loader, desc="validate", leave=False, disable=not is_main())
+    for idx, (images, targets) in enumerate(pbar):
         images = [img.to(device, non_blocking=True) for img in images]
         outputs = model(images)
         for t, out in zip(targets, outputs):

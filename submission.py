@@ -81,9 +81,9 @@ def main():
                     continue
                 results.append({
                     "image_id": image_id,
-                    "category_id": int(labels[i]),
                     "bbox": _xyxy_to_xywh(boxes[i]),
                     "score": float(scores[i]),
+                    "category_id": int(labels[i]),
                     "segmentation": encode_binary_mask(bin_mask),
                 })
 
