@@ -4,6 +4,7 @@ import io
 import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
+from tqdm import tqdm
 
 from .rle import encode_binary_mask
 
@@ -16,7 +17,7 @@ def _xyxy_to_xywh(box):
 def build_coco_gt(dataset):
     images, annotations = [], []
     ann_id = 1
-    for idx in range(len(dataset)):
+    for idx in tqdm(range(len(dataset)), desc="Building COCO GT", unit="img"):
         _, target = dataset[idx]
         masks = target["masks"].numpy().astype(np.uint8) if target["masks"].numel() else np.zeros((0,), dtype=np.uint8)
         boxes = target["boxes"].numpy() if target["boxes"].numel() else np.zeros((0, 4), dtype=np.float32)

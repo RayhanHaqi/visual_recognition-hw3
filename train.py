@@ -106,10 +106,7 @@ def main():
 
     coco_gt = None
     if is_main():
-        t0_gt = time.time()
-        print("Building COCO ground truth for validation...")
         coco_gt = build_coco_gt(val_ds)
-        print(f"  done in {time.time() - t0_gt:.1f}s")
 
     log_file = Path(args.log_path) / f"{args.run_name}.csv"
     if is_main() and not log_file.exists():
