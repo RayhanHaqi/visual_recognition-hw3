@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import timm
 import torch
 import torchvision
@@ -38,6 +36,25 @@ def _build_convnext_fpn(pretrained=True):
     )
 
 
+def _transfer_coco_heads(target_model):
+    src = maskrcnn_resnet50_fpn_v2(weights="DEFAULT", num_classes=91)
+    src_state = src.state_dict()
+    target_state = target_model.state_dict()
+
+    transferred = 0
+    for key in target_state:
+        if not key.startswith("backbone") and key in src_state:
+            src_shape = src_state[key].shape
+            tgt_shape = target_state[key].shape
+            if src_shape == tgt_shape:
+                target_state[key] = src_state[key]
+                transferred += 1
+
+    target_model.load_state_dict(target_state)
+    del src
+    print(f"  Transferred {transferred} head params from COCO-pretrained ResNet-50.")
+
+
 def build_maskrcnn(num_classes=5, pretrained=True, min_size=512, max_size=1024,
                    anchor_sizes=None, box_detections_per_img=100, backbone="resnet50"):
     if backbone == "resnet50":
@@ -57,6 +74,8 @@ def build_maskrcnn(num_classes=5, pretrained=True, min_size=512, max_size=1024,
             max_size=max_size,
             box_detections_per_img=box_detections_per_img,
         )
+        if pretrained:
+            _transfer_coco_heads(model)
         if not pretrained:
             model.roi_heads.box_roi_pool = MultiScaleRoIAlign(
                 featmap_names=["0", "1", "2", "3"], output_size=7, sampling_ratio=2,
