@@ -24,6 +24,7 @@ def parse_args():
     p.add_argument("--anchor_sizes", type=str, default=None,
                    help="Comma-separated sizes, e.g. '8,16,32,64,128'")
     p.add_argument("--box_detections_per_img", type=int, default=100)
+    p.add_argument("--backbone", type=str, default=None, choices=["resnet50", "convnext_base"])
     p.add_argument("--gpu", type=int, default=0)
 
     return p.parse_args()
@@ -69,6 +70,9 @@ def main():
 
     if args.anchor_sizes is not None:
         anchor_sizes = tuple((int(x),) for x in args.anchor_sizes.split(","))
+
+    if args.backbone is not None:
+        backbone = args.backbone
 
     model_kwargs = {
         "num_classes": 5, "pretrained": False,

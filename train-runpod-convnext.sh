@@ -39,7 +39,8 @@ python submission.py \
     "./checkpoints/${RUN_NAME}_best.pth" \
     --min_size 800 --max_size 1333 \
     --anchor_sizes "8,16,32,64,128" \
-    --box_detections_per_img 500 && \
+    --box_detections_per_img 500 \
+    --backbone convnext_base && \
 rm -rf ./checkpoints/* && \
 
 echo "[4/4] Saving to GitHub..." && \
