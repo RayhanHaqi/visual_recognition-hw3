@@ -13,7 +13,10 @@ LR=${2:-1e-4}
 WD=${3:-1e-4}
 WORKER=${4:-2}
 EPOCHS=${5:-100}
-RUN_NAME="v2_bs${BS}_lr${LR}_wd${WD}_ep${EPOCHS}"
+TRACKER="run_tracker_v2.txt"
+if [ -f "$TRACKER" ]; then RUN_NUM=$(($(cat "$TRACKER") + 1)); else RUN_NUM=1; fi
+echo "$RUN_NUM" > "$TRACKER"
+RUN_NAME="v2_bs${BS}_lr${LR}_wd${WD}_ep${EPOCHS}_run${RUN_NUM}"
 
 echo "=================================================="
 echo "HW3 v2 PIPELINE: $RUN_NAME  (single-GPU)"
