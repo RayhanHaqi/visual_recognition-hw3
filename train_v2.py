@@ -41,10 +41,10 @@ def parse_args():
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--gpu", type=int, default=0)
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--val_frac", type=float, default=0.15)
+    p.add_argument("--val_frac", type=float, default=0.05)
     p.add_argument("--min_size", type=int, default=800)
     p.add_argument("--max_size", type=int, default=1333)
-    p.add_argument("--patience", type=int, default=15)
+    p.add_argument("--patience", type=int, default=30)
     p.add_argument("--amp", action="store_true", default=True)
     p.add_argument("--no_amp", dest="amp", action="store_false")
     p.add_argument("--ema_decay", type=float, default=0.9998)
@@ -182,9 +182,8 @@ def main():
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=args.wd)
     steps_per_epoch = max(1, len(train_loader))
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer, max_lr=args.lr, epochs=args.epochs, steps_per_epoch=steps_per_epoch,
-        pct_start=0.1, anneal_strategy="cos",
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=20 * steps_per_epoch, T_mult=1, eta_min=args.lr * 1e-3,
     )
     scaler = GradScaler("cuda", enabled=args.amp)
 
