@@ -26,6 +26,13 @@ from utils.ddp import cleanup_distributed, init_distributed, is_main
 
 
 LOSS_KEYS = ["loss_classifier", "loss_box_reg", "loss_mask", "loss_objectness", "loss_rpn_box_reg"]
+LOSS_WEIGHTS = {
+    "loss_classifier": 1.0,
+    "loss_box_reg": 3.0,
+    "loss_mask": 1.0,
+    "loss_objectness": 1.0,
+    "loss_rpn_box_reg": 1.0,
+}
 
 
 def parse_args():
@@ -34,7 +41,7 @@ def parse_args():
     p.add_argument("--data_path", type=str, default="datasets/train")
     p.add_argument("--save_path", type=str, default="checkpoints")
     p.add_argument("--log_path", type=str, default="log")
-    p.add_argument("--epochs", type=int, default=100)
+    p.add_argument("--epochs", type=int, default=150)
     p.add_argument("--batch_size", type=int, default=2)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--wd", type=float, default=1e-4)
@@ -230,7 +237,7 @@ def main():
             optimizer.zero_grad(set_to_none=True)
             with autocast("cuda", enabled=args.amp):
                 loss_dict = model(images, targets)
-                loss = sum(loss_dict.values())
+                loss = sum(loss_dict[k] * LOSS_WEIGHTS.get(k, 1.0) for k in loss_dict)
             if not torch.isfinite(loss):
                 continue
             scaler.scale(loss).backward()
