@@ -5,7 +5,7 @@
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-BS=${1:-2}
+BS=${1:-1}
 LR=${2:-1e-4}
 WD=${3:-1e-4}
 WORKER=${4:-8}
