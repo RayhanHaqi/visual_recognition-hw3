@@ -1,0 +1,1 @@
+epoch,train_loss,loss_classifier,loss_box_reg,loss_mask,loss_objectness,loss_rpn_box_reg,val_AP,val_AP50,val_AP75,lr,secs
