@@ -1,11 +1,11 @@
 #!/bin/bash
 # Full pipeline: ConvNeXt-Base → submit → git commit/push (single GPU, no DDP).
 # Usage: bash train-convnext.sh [bs] [lr] [wd] [workers] [epochs]
-#   bs=1  lr=1e-4  wd=1e-4  workers=8  epochs=200
+#   bs=2  lr=1e-4  wd=1e-4  workers=8  epochs=200
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-BS=${1:-1}
+BS=${1:-2}
 LR=${2:-1e-4}
 WD=${3:-1e-4}
 WORKER=${4:-8}

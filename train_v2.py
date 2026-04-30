@@ -28,11 +28,12 @@ from utils.ddp import cleanup_distributed, init_distributed, is_main
 LOSS_KEYS = ["loss_classifier", "loss_box_reg", "loss_mask", "loss_objectness", "loss_rpn_box_reg"]
 LOSS_WEIGHTS = {
     "loss_classifier": 1.0,
-    "loss_box_reg": 2.0,
+    "loss_box_reg": 3.0,
     "loss_mask": 1.0,
     "loss_objectness": 1.0,
     "loss_rpn_box_reg": 1.0,
 }
+_OOM_RESTART_BS = 0
 
 
 def parse_args():
@@ -48,7 +49,7 @@ def parse_args():
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--gpu", type=int, default=0)
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--val_frac", type=float, default=0.15)
+    p.add_argument("--val_frac", type=float, default=0.0)
     p.add_argument("--min_size", type=int, default=800)
     p.add_argument("--max_size", type=int, default=1333)
     p.add_argument("--patience", type=int, default=30)
@@ -139,8 +140,10 @@ def merge_tta(orig, flipped, iou_thresh=0.5):
     return merged
 
 
-def main():
+def main(bs_override=None):
     args = parse_args()
+    if bs_override is not None:
+        args.batch_size = bs_override
     distributed, rank, world_size, local_rank = init_distributed()
     device = torch.device(f"cuda:{local_rank}") if distributed else torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     set_seed(args.seed + rank)
@@ -150,10 +153,11 @@ def main():
 
     train_ids, val_ids = make_splits(args.data_path, seed=args.seed, val_frac=args.val_frac)
     train_ds = CellInstanceDataset(args.data_path, train_ids, transform=build_train_transform_v2())
-    val_ds = CellInstanceDataset(args.data_path, val_ids, transform=build_val_transform())
+    has_val = len(val_ids) > 0
+    val_ds = CellInstanceDataset(args.data_path, val_ids, transform=build_val_transform()) if has_val else None
 
     if is_main():
-        print(f"Train: {len(train_ds)}  |  Val: {len(val_ds)}  |  World size: {world_size}")
+        print(f"Train: {len(train_ds)}  |  Val: {len(val_ds) if has_val else 0}  |  World size: {world_size}")
 
     if distributed:
         train_sampler = DistributedSampler(train_ds, shuffle=True, seed=args.seed)
@@ -164,8 +168,11 @@ def main():
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,
                                   num_workers=args.workers, collate_fn=collate_fn, pin_memory=True)
 
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=args.workers,
-                            collate_fn=collate_fn, pin_memory=True)
+    if has_val:
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=args.workers,
+                                collate_fn=collate_fn, pin_memory=True)
+    else:
+        val_loader = None
 
     min_size_arg = (640, 800, 960) if args.multi_scale else args.min_size
     model = build_maskrcnn(
@@ -202,7 +209,7 @@ def main():
 
     import pickle
     coco_gt = None
-    if is_main():
+    if is_main() and has_val:
         cache_path = Path(args.data_path).parent / f"coco_gt_s{args.seed}_f{args.val_frac}.pkl"
         if cache_path.exists():
             coco_gt = pickle.loads(cache_path.read_bytes())
@@ -235,16 +242,24 @@ def main():
             images = [img.to(device, non_blocking=True) for img in images]
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
             optimizer.zero_grad(set_to_none=True)
-            with autocast("cuda", enabled=args.amp):
-                loss_dict = model(images, targets)
-                loss = sum(loss_dict[k] * LOSS_WEIGHTS.get(k, 1.0) for k in loss_dict)
-            if not torch.isfinite(loss):
-                continue
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(params, max_norm=args.grad_clip)
-            scaler.step(optimizer)
-            scaler.update()
+            try:
+                with autocast("cuda", enabled=args.amp):
+                    loss_dict = model(images, targets)
+                    loss = sum(loss_dict[k] * LOSS_WEIGHTS.get(k, 1.0) for k in loss_dict)
+                if not torch.isfinite(loss):
+                    continue
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(params, max_norm=args.grad_clip)
+                scaler.step(optimizer)
+                scaler.update()
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache()
+                if args.batch_size == 1:
+                    raise
+                _OOM_RESTART_BS = max(1, args.batch_size // 2)
+                print(f"\n[WARN] OOM at BS={args.batch_size}, halving to {_OOM_RESTART_BS} and restarting.")
+                return
             scheduler.step()
             if ema is not None:
                 ema.update(target_module)
@@ -259,11 +274,15 @@ def main():
 
         ap_metrics = {"AP": 0.0, "AP50": 0.0, "AP75": 0.0}
         if is_main():
-            ap_metrics = run_validation(target_module, val_loader, device, coco_gt, tta=args.tta)
+            if has_val:
+                ap_metrics = run_validation(target_module, val_loader, device, coco_gt, tta=args.tta)
 
             elapsed = time.time() - t0
             current_lr = optimizer.param_groups[0]["lr"]
-            print(f"[ep {epoch:03d}] loss={train_loss:.4f}  AP={ap_metrics['AP']:.4f}  AP50={ap_metrics['AP50']:.4f}  AP75={ap_metrics['AP75']:.4f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
+            if has_val:
+                print(f"[ep {epoch:03d}] loss={train_loss:.4f}  AP={ap_metrics['AP']:.4f}  AP50={ap_metrics['AP50']:.4f}  AP75={ap_metrics['AP75']:.4f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
+            else:
+                print(f"[ep {epoch:03d}] loss={train_loss:.4f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
             with log_file.open("a", newline="") as f:
                 csv.writer(f).writerow([
                     epoch, train_loss,
@@ -292,7 +311,13 @@ def main():
             if not args.best_only:
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
-            if ap_metrics["AP50"] > best_ap50:
+            if not has_val:
+                if ema is not None:
+                    backup = ema.apply_to(target_module)
+                torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_best.pth")
+                if ema is not None:
+                    ema.restore(target_module, backup)
+            elif ap_metrics["AP50"] > best_ap50:
                 best_ap50 = ap_metrics["AP50"]
                 if ema is not None:
                     backup = ema.apply_to(target_module)
@@ -308,7 +333,7 @@ def main():
             else:
                 epochs_since_improve += 1
 
-            if not args.best_only:
+            if not args.best_only and has_val:
                 cand_path = Path(args.save_path) / f"{args.run_name}_top_ep{epoch:03d}_ap{ap_metrics['AP50']:.4f}.pth"
                 top_k_ckpts.append((ap_metrics["AP50"], cand_path))
                 top_k_ckpts.sort(key=lambda x: x[0], reverse=True)
@@ -320,12 +345,12 @@ def main():
                 top_k_ckpts = top_k_ckpts[:args.save_top_k]
 
         if distributed:
-            stop_signal = torch.tensor([1 if epochs_since_improve >= args.patience else 0], device=device)
+            stop_signal = torch.tensor([1 if (has_val and epochs_since_improve >= args.patience) else 0], device=device)
             torch.distributed.broadcast(stop_signal, src=0)
             if stop_signal.item() == 1:
                 break
         else:
-            if epochs_since_improve >= args.patience:
+            if has_val and epochs_since_improve >= args.patience:
                 if is_main():
                     print(f"Early stop after {args.patience} epochs without AP50 improvement.")
                 break
@@ -361,4 +386,10 @@ def run_validation(model, loader, device, coco_gt, tta=False):
 
 
 if __name__ == "__main__":
-    main()
+    bs_override = None
+    while True:
+        _OOM_RESTART_BS = 0
+        main(bs_override=bs_override)
+        if _OOM_RESTART_BS == 0:
+            break
+        bs_override = _OOM_RESTART_BS
