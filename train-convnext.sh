@@ -9,7 +9,7 @@ BS=${1:-1}
 LR=${2:-1e-4}
 WD=${3:-1e-4}
 WORKER=${4:-8}
-EPOCHS=${5:-200}
+EPOCHS=${5:-150}
 TRACKER="run_tracker_convnext.txt"
 if [ -f "$TRACKER" ]; then RUN_NUM=$(($(cat "$TRACKER") + 1)); else RUN_NUM=1; fi
 echo "$RUN_NUM" > "$TRACKER"
