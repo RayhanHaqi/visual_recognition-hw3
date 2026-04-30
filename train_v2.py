@@ -42,14 +42,14 @@ def parse_args():
     p.add_argument("--data_path", type=str, default="datasets/train")
     p.add_argument("--save_path", type=str, default="checkpoints")
     p.add_argument("--log_path", type=str, default="log")
-    p.add_argument("--epochs", type=int, default=150)
+    p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--batch_size", type=int, default=2)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--wd", type=float, default=1e-4)
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--gpu", type=int, default=0)
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--val_frac", type=float, default=0.10)
+    p.add_argument("--val_frac", type=float, default=0.0)
     p.add_argument("--min_size", type=int, default=800)
     p.add_argument("--max_size", type=int, default=1333)
     p.add_argument("--patience", type=int, default=30)
@@ -58,6 +58,7 @@ def parse_args():
     p.add_argument("--ema_decay", type=float, default=0.9998)
     p.add_argument("--grad_clip", type=float, default=10.0)
     p.add_argument("--save_top_k", type=int, default=3)
+    p.add_argument("--save_every", type=int, default=50, help="Save periodic checkpoint every N epochs when val_frac=0.0")
     p.add_argument("--tta", action="store_true", default=False)
     p.add_argument("--multi_scale", action="store_true", default=False)
     p.add_argument("--best_only", action="store_true", default=False, help="Only save best checkpoint, no _last or top-k")
@@ -315,6 +316,8 @@ def main(bs_override=None):
                 if ema is not None:
                     backup = ema.apply_to(target_module)
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_best.pth")
+                if epoch > 0 and epoch % args.save_every == 0:
+                    torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{epoch:03d}.pth")
                 if ema is not None:
                     ema.restore(target_module, backup)
             elif ap_metrics["AP50"] > best_ap50:
