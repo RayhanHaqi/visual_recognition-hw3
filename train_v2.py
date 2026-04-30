@@ -28,7 +28,7 @@ from utils.ddp import cleanup_distributed, init_distributed, is_main
 LOSS_KEYS = ["loss_classifier", "loss_box_reg", "loss_mask", "loss_objectness", "loss_rpn_box_reg"]
 LOSS_WEIGHTS = {
     "loss_classifier": 1.0,
-    "loss_box_reg": 3.0,
+    "loss_box_reg": 2.0,
     "loss_mask": 1.0,
     "loss_objectness": 1.0,
     "loss_rpn_box_reg": 1.0,
@@ -41,7 +41,7 @@ def parse_args():
     p.add_argument("--data_path", type=str, default="datasets/train")
     p.add_argument("--save_path", type=str, default="checkpoints")
     p.add_argument("--log_path", type=str, default="log")
-    p.add_argument("--epochs", type=int, default=150)
+    p.add_argument("--epochs", type=int, default=200)
     p.add_argument("--batch_size", type=int, default=2)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--wd", type=float, default=1e-4)

@@ -1,9 +1,9 @@
 #!/bin/bash
 # Full RunPod pipeline: ConvNeXt-Base → submit → git push → kill pod.
 # Usage: bash train-runpod-convnext.sh [bs] [lr] [wd] [workers] [epochs]
-#   bs=3  lr=1e-4  wd=1e-4  workers=8  epochs=150
+#   bs=3  lr=1e-4  wd=1e-4  workers=8  epochs=200
 ...
-EPOCHS=${5:-150}
+EPOCHS=${5:-200}
 TRACKER="run_tracker_convnext.txt"
 if [ -f "$TRACKER" ]; then RUN_NUM=$(($(cat "$TRACKER") + 1)); else RUN_NUM=1; fi
 echo "$RUN_NUM" > "$TRACKER"
