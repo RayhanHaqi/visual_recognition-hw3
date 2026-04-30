@@ -32,7 +32,7 @@ def make_splits(root, seed=42, val_frac=0.15):
     folders = sorted(p.name for p in root.iterdir() if p.is_dir())
     rng = random.Random(seed)
     rng.shuffle(folders)
-    n_val = max(1, int(round(len(folders) * val_frac)))
+    n_val = int(round(len(folders) * val_frac))
     val_ids = sorted(folders[:n_val])
     train_ids = sorted(folders[n_val:])
     return train_ids, val_ids
