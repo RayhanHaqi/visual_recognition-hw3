@@ -1,7 +1,7 @@
 #!/bin/bash
 # Full pipeline: ConvNeXt-Base → submit → git commit/push (single GPU, no DDP).
 # Usage: bash train-convnext.sh [bs] [lr] [wd] [workers] [epochs]
-#   bs=2  lr=1e-4  wd=1e-4  workers=8  epochs=200
+#   bs=2  lr=1e-4  wd=1e-4  workers=8  epochs=150
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
@@ -25,12 +25,21 @@ python train_v2.py \
   --epochs "$EPOCHS" --run_name "$RUN_NAME" \
   --backbone convnext_base
 
-# Step 2: generate CodaBench submission ZIP
-python submission.py \
-    "./checkpoints/${RUN_NAME}_best.pth" \
-    --min_size 800 --max_size 1333 \
-    --anchor_sizes "8,16,32,64,128" \
-    --box_detections_per_img 500
+# Step 2: generate CodaBench submission ZIPs for periodic checkpoints
+for EP in 050 100 150; do
+    CKPT="./checkpoints/${RUN_NAME}_ep${EP}.pth"
+    if [ -f "$CKPT" ]; then
+        echo "  -> Submitting epoch $EP"
+        python submission.py \
+            "$CKPT" \
+            --min_size 800 --max_size 1333 \
+            --anchor_sizes "8,16,32,64,128" \
+            --box_detections_per_img 500
+        mv submission/submission.zip "submission/${RUN_NAME}_ep${EP}_HW3.zip" 2>/dev/null || true
+    else
+        echo "  -> Skip epoch $EP (checkpoint not found)"
+    fi
+done
 
 # Step 3: auto-commit results and push to remote
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
