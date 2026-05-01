@@ -358,6 +358,13 @@ def main(bs_override=None):
                     print(f"Early stop after {args.patience} epochs without AP50 improvement.")
                 break
 
+    if not has_val and is_main():
+        if ema is not None:
+            backup = ema.apply_to(target_module)
+        torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{args.epochs:03d}.pth")
+        if ema is not None:
+            ema.restore(target_module, backup)
+
     cleanup_distributed()
 
 
