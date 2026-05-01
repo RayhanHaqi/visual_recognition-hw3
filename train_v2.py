@@ -45,7 +45,7 @@ def parse_args():
     p.add_argument("--epochs", type=int, default=150)
     p.add_argument("--batch_size", type=int, default=2)
     p.add_argument("--lr", type=float, default=2e-4)
-    p.add_argument("--wd", type=float, default=1e-3)
+    p.add_argument("--wd", type=float, default=2e-3)
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--gpu", type=int, default=0)
     p.add_argument("--seed", type=int, default=42)
