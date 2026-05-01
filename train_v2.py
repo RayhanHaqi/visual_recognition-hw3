@@ -342,16 +342,12 @@ def main(bs_override=None):
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
             if not has_val:
-                if ema is not None:
-                    backup = ema.apply_to(target_module)
-                torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_best.pth")
-                if epoch > 0 and epoch % args.save_every == 0:
+                if epoch >= 50 and epoch % 25 == 0:
+                    if ema is not None:
+                        backup = ema.apply_to(target_module)
                     torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{epoch:03d}.pth")
-                if plat_saved == epoch:
-                    torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_plateau.pth")
-                    print(f"*** Saved plateau checkpoint at epoch {epoch} ***")
-                if ema is not None:
-                    ema.restore(target_module, backup)
+                    if ema is not None:
+                        ema.restore(target_module, backup)
             elif ap_metrics["AP50"] > best_ap50:
                 best_ap50 = ap_metrics["AP50"]
                 if ema is not None:
