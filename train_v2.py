@@ -342,12 +342,6 @@ def main(bs_override=None):
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
             if not has_val:
-                if epoch >= 50 and epoch % 25 == 0:
-                    if ema is not None:
-                        backup = ema.apply_to(target_module)
-                    torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{epoch:03d}.pth")
-                    if ema is not None:
-                        ema.restore(target_module, backup)
                 if plat_saved == epoch:
                     if ema is not None:
                         backup = ema.apply_to(target_module)
