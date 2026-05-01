@@ -40,6 +40,19 @@ for EP in 050 075 100 125 150; do
         echo "  -> Skip epoch $EP (checkpoint not found)"
     fi
 done
+# Plateau checkpoint (auto-named with epoch)
+for PLAT_CKPT in ./checkpoints/${RUN_NAME}_plateau_ep*.pth; do
+    if [ -f "$PLAT_CKPT" ]; then
+        PLAT_EP=$(basename "$PLAT_CKPT" .pth | grep -oP 'ep\d+$')
+        echo "  -> Submitting plateau ($PLAT_EP)"
+        python submission.py \
+            "$PLAT_CKPT" \
+            --min_size 800 --max_size 1333 \
+            --anchor_sizes "8,16,32,64,128" \
+            --box_detections_per_img 500
+        mv submission/submission.zip "submission/${RUN_NAME}_${PLAT_EP}_HW3.zip" 2>/dev/null || true
+    fi
+done
 
 # Step 3: auto-commit results and push to remote
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
