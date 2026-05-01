@@ -59,6 +59,8 @@ def parse_args():
     p.add_argument("--grad_clip", type=float, default=10.0)
     p.add_argument("--save_top_k", type=int, default=3)
     p.add_argument("--save_every", type=int, default=25, help="Save periodic checkpoint every N epochs when val_frac=0.0")
+    p.add_argument("--plat_window", type=int, default=10, help="Window for gradient norm plateau detection")
+    p.add_argument("--plat_thresh", type=float, default=0.03, help="Relative change threshold for plateau detection")
     p.add_argument("--tta", action="store_true", default=False)
     p.add_argument("--multi_scale", action="store_true", default=False)
     p.add_argument("--best_only", action="store_true", default=False, help="Only save best checkpoint, no _last or top-k")
@@ -227,8 +229,13 @@ def main(bs_override=None):
             csv.writer(f).writerow([
                 "epoch", "train_loss",
                 *LOSS_KEYS,
-                "val_AP", "val_AP50", "val_AP75", "lr", "secs",
+                "val_AP", "val_AP50", "val_AP75", "lr", "grad_norm", "secs",
             ])
+
+    ema_gn = None
+    plat_saved = False
+    gn_ema_history = []
+    plat_ema = 0.9
 
     for epoch in range(start_epoch, args.epochs):
         if distributed:
@@ -237,6 +244,7 @@ def main(bs_override=None):
         t0 = time.time()
         running_loss = 0.0
         running_components = {k: 0.0 for k in LOSS_KEYS}
+        running_grad_norm = 0.0
         n_batches = 0
         pbar = tqdm(train_loader, desc=f"[ep {epoch:03d}] train", leave=False, disable=not is_main())
         for images, targets in pbar:
@@ -251,7 +259,14 @@ def main(bs_override=None):
                     continue
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(params, max_norm=args.grad_clip)
+                try:
+                    gn = torch.nn.utils.clip_grad_norm_(params, max_norm=args.grad_clip)
+                    if isinstance(gn, torch.Tensor):
+                        running_grad_norm += gn.item()
+                    else:
+                        running_grad_norm += float(gn)
+                except Exception:
+                    pass
                 scaler.step(optimizer)
                 scaler.update()
             except torch.cuda.OutOfMemoryError:
@@ -272,6 +287,7 @@ def main(bs_override=None):
             pbar.set_postfix(loss=f"{running_loss/max(1,n_batches):.4f}")
         train_loss = running_loss / max(1, n_batches)
         comp_means = {k: running_components[k] / max(1, n_batches) for k in LOSS_KEYS}
+        mean_grad_norm = running_grad_norm / max(1, n_batches)
 
         ap_metrics = {"AP": 0.0, "AP50": 0.0, "AP75": 0.0}
         if is_main():
@@ -283,14 +299,27 @@ def main(bs_override=None):
             if has_val:
                 print(f"[ep {epoch:03d}] loss={train_loss:.4f}  AP={ap_metrics['AP']:.4f}  AP50={ap_metrics['AP50']:.4f}  AP75={ap_metrics['AP75']:.4f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
             else:
-                print(f"[ep {epoch:03d}] loss={train_loss:.4f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
+                print(f"[ep {epoch:03d}] loss={train_loss:.4f}  gn={mean_grad_norm:.2f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
             with log_file.open("a", newline="") as f:
                 csv.writer(f).writerow([
                     epoch, train_loss,
                     *[comp_means[k] for k in LOSS_KEYS],
                     ap_metrics["AP"], ap_metrics["AP50"], ap_metrics["AP75"],
-                    current_lr, elapsed,
+                    current_lr, mean_grad_norm, elapsed,
                 ])
+
+            if not has_val and not plat_saved and epoch > 0:
+                if ema_gn is None:
+                    ema_gn = mean_grad_norm
+                else:
+                    ema_gn = plat_ema * ema_gn + (1 - plat_ema) * mean_grad_norm
+                gn_ema_history.append(ema_gn)
+                if len(gn_ema_history) > args.plat_window:
+                    gn_ema_history.pop(0)
+                    rel_change = abs(gn_ema_history[-1] - gn_ema_history[0]) / max(gn_ema_history[0], 1e-8)
+                    if rel_change < args.plat_thresh:
+                        plat_saved = epoch
+                        print(f"\n*** Gradient norm plateau at epoch {epoch} (rel_change={rel_change:.4f}) ***")
 
             model_args = {
                 "min_size": args.min_size,
@@ -318,6 +347,9 @@ def main(bs_override=None):
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_best.pth")
                 if epoch > 0 and epoch % args.save_every == 0:
                     torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{epoch:03d}.pth")
+                if plat_saved == epoch:
+                    torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_plateau.pth")
+                    print(f"*** Saved plateau checkpoint at epoch {epoch} ***")
                 if ema is not None:
                     ema.restore(target_module, backup)
             elif ap_metrics["AP50"] > best_ap50:
