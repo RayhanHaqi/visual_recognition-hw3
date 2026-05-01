@@ -1,13 +1,13 @@
 #!/bin/bash
 # Full pipeline: ConvNeXt-Base → submit → git commit/push (single GPU, no DDP).
 # Usage: bash train-convnext.sh [bs] [lr] [wd] [workers] [epochs]
-#   bs=1  lr=1e-4  wd=1e-3  workers=8  epochs=150
+#   bs=1  lr=1e-4  wd=2e-3  workers=8  epochs=150
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 BS=${1:-1}
 LR=${2:-1e-4}
-WD=${3:-1e-3}
+WD=${3:-2e-3}
 WORKER=${4:-8}
 EPOCHS=${5:-150}
 TRACKER="run_tracker_convnext.txt"
@@ -26,7 +26,7 @@ python train_v2.py \
   --backbone convnext_base
 
 # Step 2: generate CodaBench submission ZIPs for periodic checkpoints
-for EP in 050 100 150; do
+for EP in 050 075 100 125 150; do
     CKPT="./checkpoints/${RUN_NAME}_ep${EP}.pth"
     if [ -f "$CKPT" ]; then
         echo "  -> Submitting epoch $EP"
