@@ -233,7 +233,7 @@ def main(bs_override=None):
             ])
 
     ema_gn = None
-    plat_saved = False
+    plat_saved = -1
     gn_ema_history = []
     plat_ema = 0.9
 
@@ -308,7 +308,7 @@ def main(bs_override=None):
                     current_lr, mean_grad_norm, elapsed,
                 ])
 
-            if not has_val and not plat_saved and epoch > 0:
+            if not has_val and plat_saved < 0 and epoch > 0:
                 if ema_gn is None:
                     ema_gn = mean_grad_norm
                 else:
