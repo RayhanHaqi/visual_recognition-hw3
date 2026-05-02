@@ -2,7 +2,8 @@
 # Full RunPod pipeline: ConvNeXt-Base → submit → git push → kill pod.
 # Usage: bash train-runpod-convnext.sh [bs] [lr] [wd] [workers] [epochs]
 #   bs=3  lr=2e-4  wd=2e-3  workers=8  epochs=150
-...
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 BS=${1:-3}
 LR=${2:-2e-4}
 WD=${3:-2e-3}
