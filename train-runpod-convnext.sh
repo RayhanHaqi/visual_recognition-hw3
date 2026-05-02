@@ -1,11 +1,11 @@
 #!/bin/bash
 # Full RunPod pipeline: ConvNeXt-Base → submit → git push → kill pod.
 # Usage: bash train-runpod-convnext.sh [bs] [lr] [wd] [workers] [epochs]
-#   bs=3  lr=1e-4  wd=1e-3  workers=8  epochs=150
+#   bs=3  lr=2e-4  wd=2e-3  workers=8  epochs=150
 ...
 BS=${1:-3}
-LR=${2:-1e-4}
-WD=${3:-1e-3}
+LR=${2:-2e-4}
+WD=${3:-2e-3}
 WORKER=${4:-8}
 EPOCHS=${5:-150}
 TRACKER="run_tracker_convnext.txt"
@@ -46,18 +46,6 @@ for EP in 050 075 100 125 150; do
             --box_detections_per_img 500 \
             --backbone convnext_base
         mv submission/submission.zip "submission/${RUN_NAME}_ep${EP}_HW3.zip" 2>/dev/null || true
-    fi
-done
-for PLAT_CKPT in ./checkpoints/${RUN_NAME}_plateau_ep*.pth; do
-    if [ -f "$PLAT_CKPT" ]; then
-        PLAT_EP=$(basename "$PLAT_CKPT" .pth | grep -oP 'ep\d+$')
-        python submission.py \
-            "$PLAT_CKPT" \
-            --min_size 800 --max_size 1333 \
-            --anchor_sizes "8,16,32,64,128" \
-            --box_detections_per_img 500 \
-            --backbone convnext_base
-        mv submission/submission.zip "submission/${RUN_NAME}_${PLAT_EP}_HW3.zip" 2>/dev/null || true
     fi
 done && \
 rm -rf ./checkpoints/* && \

@@ -59,8 +59,6 @@ def parse_args():
     p.add_argument("--grad_clip", type=float, default=10.0)
     p.add_argument("--save_top_k", type=int, default=3)
     p.add_argument("--save_every", type=int, default=25, help="Save periodic checkpoint every N epochs when val_frac=0.0")
-    p.add_argument("--plat_window", type=int, default=10, help="Window for gradient norm plateau detection")
-    p.add_argument("--plat_thresh", type=float, default=0.03, help="Relative change threshold for plateau detection")
     p.add_argument("--tta", action="store_true", default=False)
     p.add_argument("--multi_scale", action="store_true", default=False)
     p.add_argument("--best_only", action="store_true", default=False, help="Only save best checkpoint, no _last or top-k")
@@ -232,11 +230,6 @@ def main(bs_override=None):
                 "val_AP", "val_AP50", "val_AP75", "lr", "grad_norm", "secs",
             ])
 
-    ema_gn = None
-    plat_saved = -1
-    gn_ema_history = []
-    plat_ema = 0.9
-
     for epoch in range(start_epoch, args.epochs):
         if distributed:
             train_sampler.set_epoch(epoch)
@@ -308,19 +301,6 @@ def main(bs_override=None):
                     current_lr, mean_grad_norm, elapsed,
                 ])
 
-            if not has_val and plat_saved < 0 and epoch > 0:
-                if ema_gn is None:
-                    ema_gn = mean_grad_norm
-                else:
-                    ema_gn = plat_ema * ema_gn + (1 - plat_ema) * mean_grad_norm
-                gn_ema_history.append(ema_gn)
-                if len(gn_ema_history) > args.plat_window:
-                    gn_ema_history.pop(0)
-                    rel_change = abs(gn_ema_history[-1] - gn_ema_history[0]) / max(gn_ema_history[0], 1e-8)
-                    if rel_change < args.plat_thresh:
-                        plat_saved = epoch
-                        print(f"\n*** Gradient norm plateau at epoch {epoch} (rel_change={rel_change:.4f}) ***")
-
             model_args = {
                 "min_size": args.min_size,
                 "max_size": args.max_size,
@@ -342,10 +322,10 @@ def main(bs_override=None):
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
             if not has_val:
-                if plat_saved == epoch:
+                if epoch >= 50 and epoch % 25 == 0:
                     if ema is not None:
                         backup = ema.apply_to(target_module)
-                    torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_plateau_ep{epoch:03d}.pth")
+                    torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{epoch:03d}.pth")
                     if ema is not None:
                         ema.restore(target_module, backup)
             elif ap_metrics["AP50"] > best_ap50:
