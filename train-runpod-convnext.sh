@@ -1,14 +1,15 @@
 #!/bin/bash
 # Full RunPod pipeline: ConvNeXt-Base → submit → git push → kill pod.
 # Usage: bash train-runpod-convnext.sh [bs] [lr] [wd] [workers] [epochs]
-#   bs=3  lr=2e-4  wd=2e-3  workers=8  epochs=150
+#   bs=3  lr=2e-4  wd=2e-3  workers=8  epochs=250  pct_start=0.5
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 BS=${1:-3}
 LR=${2:-2e-4}
 WD=${3:-2e-3}
 WORKER=${4:-8}
-EPOCHS=${5:-150}
+EPOCHS=${5:-250}
+PCT_START=${6:-0.5}
 TRACKER="run_tracker_convnext.txt"
 if [ -f "$TRACKER" ]; then RUN_NUM=$(($(cat "$TRACKER") + 1)); else RUN_NUM=1; fi
 echo "$RUN_NUM" > "$TRACKER"
@@ -33,11 +34,11 @@ python setup.py && \
 echo "[2/4] Training (ConvNeXt-Base)..." && \
 python train_v2.py \
   --batch_size "$BS" --lr "$LR" --wd "$WD" --workers "$WORKER" \
-  --epochs "$EPOCHS" --run_name "$RUN_NAME" --best_only \
+  --epochs "$EPOCHS" --pct_start "$PCT_START" --run_name "$RUN_NAME" --best_only \
   --backbone convnext_base && \
 
 echo "[3/4] Generating submissions..." && \
-for EP in 050 075 100 125 150; do
+for EP in 050 100 150 200 250; do
     CKPT="./checkpoints/${RUN_NAME}_ep${EP}.pth"
     if [ -f "$CKPT" ]; then
         python submission.py \

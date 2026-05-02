@@ -43,6 +43,7 @@ def parse_args():
     p.add_argument("--save_path", type=str, default="checkpoints")
     p.add_argument("--log_path", type=str, default="log")
     p.add_argument("--epochs", type=int, default=150)
+    p.add_argument("--pct_start", type=float, default=0.5, help="OneCycleLR pct_start")
     p.add_argument("--batch_size", type=int, default=2)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--wd", type=float, default=1e-3)
@@ -199,7 +200,7 @@ def main(bs_override=None):
     steps_per_epoch = max(1, len(train_loader))
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer, max_lr=args.lr, epochs=args.epochs, steps_per_epoch=steps_per_epoch,
-        pct_start=0.3, anneal_strategy="cos",
+        pct_start=args.pct_start, anneal_strategy="cos",
     )
     scaler = GradScaler("cuda", enabled=args.amp)
 
@@ -322,7 +323,7 @@ def main(bs_override=None):
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
             if not has_val:
-                if epoch >= 50 and epoch % 25 == 0:
+                if epoch >= 50 and epoch % 50 == 0:
                     if ema is not None:
                         backup = ema.apply_to(target_module)
                     torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{epoch:03d}.pth")
