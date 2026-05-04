@@ -244,7 +244,7 @@ def main():
                         "segmentation": encode_binary_mask(bin_mask),
                     }) + "\n")
                     total += 1
-                del merged, output, boxes, scores, labels, masks
+                del output, boxes, scores, labels, masks
                 gc.collect()
 
     # Convert JSONL to JSON
