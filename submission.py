@@ -93,24 +93,34 @@ def _merge_outputs(outputs, iou_thresh):
     boxes = torch.cat([o["boxes"] for o in outputs], dim=0)
     scores = torch.cat([o["scores"] for o in outputs], dim=0)
     labels = torch.cat([o["labels"] for o in outputs], dim=0)
-    masks_list = [o["masks"] for o in outputs]
 
-    target_shape = masks_list[0].shape[-2:]
-    for i, m in enumerate(masks_list):
-        if m.shape[-2:] != target_shape:
-            masks_list[i] = F.interpolate(m, size=target_shape, mode="bilinear", align_corners=False)
-    masks = torch.cat(masks_list, dim=0)
     keep_all = []
     for c in labels.unique():
         idx = (labels == c).nonzero(as_tuple=True)[0]
         keep = nms(boxes[idx], scores[idx], iou_thresh)
         keep_all.append(idx[keep])
     keep_all = torch.cat(keep_all) if keep_all else torch.zeros((0,), dtype=torch.long)
+
+    masks_list = [o["masks"] for o in outputs]
+    target_shape = masks_list[0].shape[-2:]
+    offset = 0
+    kept_masks = []
+    for m in masks_list:
+        n = m.shape[0]
+        mask_keep = keep_all[(keep_all >= offset) & (keep_all < offset + n)] - offset
+        if mask_keep.numel() > 0:
+            m_sel = m[mask_keep]
+            if m_sel.shape[-2:] != target_shape:
+                m_sel = F.interpolate(m_sel, size=target_shape, mode="bilinear", align_corners=False)
+            kept_masks.append(m_sel)
+        offset += n
+    masks = torch.cat(kept_masks, dim=0) if kept_masks else masks_list[0][:0]
+
     return {
         "boxes": boxes[keep_all],
         "scores": scores[keep_all],
         "labels": labels[keep_all],
-        "masks": masks[keep_all],
+        "masks": masks,
     }
 
 
