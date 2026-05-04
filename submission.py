@@ -105,6 +105,10 @@ def _merge_outputs(outputs, iou_thresh):
     }
 
 
+def _to_cpu(out):
+    return {k: v.cpu() for k, v in out.items()}
+
+
 def main():
     args = parse_args()
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
@@ -173,13 +177,15 @@ def main():
             img_t = img_t.to(device)
             W = img_t.shape[-1]
 
-            all_outputs = [model([img_t])[0]]
+            all_outputs = [_to_cpu(model([img_t])[0])]
 
             if args.tta:
                 flipped = torch.flip(img_t, dims=[-1])
                 flipped_out = model([flipped])[0]
-                unflipped = hflip_predictions([flipped_out], [W])
-                all_outputs.append(unflipped[0])
+                unflipped = hflip_predictions([flipped_out], [W])[0]
+                del flipped_out
+                all_outputs.append(_to_cpu(unflipped))
+                del unflipped
 
             if args.ms_tta:
                 orig_transform = model.transform
@@ -191,11 +197,14 @@ def main():
                             image_std=orig_transform.image_std,
                         )
                         out = model([img_t])[0]
-                        all_outputs.append(out)
+                        all_outputs.append(_to_cpu(out))
+                        del out
                         if args.tta:
                             flipped_out = model([flipped])[0]
-                            unflipped = hflip_predictions([flipped_out], [W])
-                            all_outputs.append(unflipped[0])
+                            unflipped = hflip_predictions([flipped_out], [W])[0]
+                            del flipped_out
+                            all_outputs.append(_to_cpu(unflipped))
+                            del unflipped
                 finally:
                     model.transform = orig_transform
 
