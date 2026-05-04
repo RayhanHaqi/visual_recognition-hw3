@@ -1,0 +1,425 @@
+[33mcommit 966aa31563884df13a3828a356bb6a6fc4132855[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Mon May 4 14:28:09 2026 +0800
+
+    add ep150 checkpoint via LFS
+
+[33mcommit 3c2afb880b851adb414a43b45666919e8feb62ab[m[33m ([m[1;31morigin/main[m[33m)[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Mon May 4 13:54:33 2026 +0800
+
+    fix: resize masks to common size in _merge_outputs for multi-scale TTA
+
+[33mcommit ddbbe45174f2781681b468fc0a6e59163d3e0fa9[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Mon May 4 13:46:24 2026 +0800
+
+    perf: move TTA outputs to CPU + delete GPU intermediates — VRAM in steady state, no score impact
+
+[33mcommit f48820233fa4a82afce8da15ee216d916358379c[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Mon May 4 13:40:53 2026 +0800
+
+    fix: TTA merge on CPU to avoid OOM from GPU mask concatenation
+
+[33mcommit c082a77c82eeb9ad0eb9c088a9e33a33546535e0[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Mon May 4 13:31:51 2026 +0800
+
+    feat: TTA in submission.py — hflip (--tta) and multi-scale (--ms_tta) with per-class NMS merge
+
+[33mcommit 3a26aee50e420fbe228ee5a2315ae1ed808b975c[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Sun May 3 00:35:22 2026 +0800
+
+    pipeline: convnext_bs2_lr2e-4_wd2e-3_ep250_run17
+
+[33mcommit 90e835b41d7104e9eab8c0fa914982e8a85fcd94[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Sat May 2 18:40:48 2026 +0800
+
+    feat: epochs=250, pct_start=0.5, periodic saves every 50 epochs (5 checkpoints)
+
+[33mcommit 7971d59b6f9e35776076abb5b422c5146ef5c132[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Sat May 2 10:32:50 2026 +0000
+
+    Auto-save: Done training convnext_bs2_lr2e-4_wd2e-3_ep150_run16_runpod
+
+[33mcommit 723771d768f1bbbb85aeef7215768162761c125b[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Sat May 2 15:06:06 2026 +0800
+
+    fix: RunPod script (remove stale '...', add PYTORCH_CUDA_ALLOC_CONF)
+
+[33mcommit 3365775abd1f0bbb9917f906be83212045dd7445[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Sat May 2 14:56:16 2026 +0800
+
+    revert: periodic saves (50/75/100/125/150), lr=2e-4 wd=2e-3, remove plateau detection
+
+[33mcommit 24cf09c4a184f826bc52b905b12bb9607a21d7d7[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Sat May 2 04:03:42 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-3_ep150_run15
+
+[33mcommit 1abebdb066d77e005a7e7c949d763bfa6bbe7574[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Sat May 2 01:00:08 2026 +0800
+
+    fix: plat_saved=False caught by Python truthiness (False==0), use -1 sentinel
+
+[33mcommit ffcc64fa1d90db69f15a7c8fdb3ad04ad2c611c4[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 19:52:51 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-3_ep150_run14
+
+[33mcommit e103330ed34415cb057e7b73f537304f6c73aff9[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 16:47:33 2026 +0800
+
+    feat: save and submit only plateau checkpoint (no periodic saves)
+
+[33mcommit 29ce8de77298c38417d71fbc8da18f19724c6617[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 16:44:44 2026 +0800
+
+    chore: revert to best config (lr=1e-4, wd=1e-3) with grad norm plateau detection
+
+[33mcommit bba479342202b3c352ac16ae1e124b92335b2eff[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 16:43:07 2026 +0800
+
+    feat: save and submit plateau checkpoint with epoch number (e.g. _plateau_ep087.pth)
+
+[33mcommit 63d881470a73cdfb6902822512ff0e1671ffb74d[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 16:38:26 2026 +0800
+
+    feat: save exactly 5 periodic checkpoints (50/75/100/125/150) when val_frac=0.0
+
+[33mcommit 5890b4f7f7b9e6bd476f8fcaa77825c1bd11158d[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 16:36:54 2026 +0800
+
+    feat: gradient norm tracking and plateau detection for epoch selection
+
+[33mcommit 33dcb326629384565ad39e17c78b36f1a0f0d138[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 15:11:53 2026 +0800
+
+    chore: restore wd=2e-3, keep lr=2e-4
+
+[33mcommit fad17ad071795a4389a833b60b897764f8e19e4b[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 15:11:25 2026 +0800
+
+    chore: lr=2e-4, wd=1e-3 (revert wd, boost lr)
+
+[33mcommit 7e4dd3ba1cee364d29015bd7938fa6ebb69ed01a[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 15:03:15 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd2e-3_ep150_run13
+
+[33mcommit d9b88ba2880d5ac9d8e279876585465e9aa9db97[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 11:45:27 2026 +0800
+
+    chore: wd=2e-3, save_every=25 (checkpoints at 50/75/100/125/150)
+
+[33mcommit 33deb5addca7d250fd73f921b1397f30f0562154[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 11:34:22 2026 +0800
+
+    fix: save final epoch checkpoint after training loop (off-by-one)
+
+[33mcommit 8bb98e807c15e1be833b8e5b450a35d226f418d5[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 11:34:20 2026 +0800
+
+    .
+
+[33mcommit 8d95361bdc6b4042273f05375caa2256a8705532[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 04:16:33 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-3_ep150_run12
+
+[33mcommit a579877553c4505033b23d1dded50dae47c7b05f[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 00:57:38 2026 +0800
+
+    chore: wd=1e-3, epochs=150, fix missing BS/LR/WD in runpod script
+
+[33mcommit d7c8eaa2d4c5553525632f350a3bd63c65438377[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 00:48:32 2026 +0800
+
+    feat: multi-epoch submission (ep050/ep100/ep150) in both convnext scripts
+
+[33mcommit 0517943e4487ff8d7d3e0e070109722831b9af02[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 00:41:26 2026 +0800
+
+    fix: align train-convnext.sh epochs default to 150
+
+[33mcommit cda0fe4886b4d077adc2c24806905d4f6a4a64fe[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Fri May 1 00:48:17 2026 +0800
+
+    convnext_bs1_lr1e-4_wd1e-4_ep200_run11
+
+[33mcommit 3128e1321f366be08ceea39b410b9e5cfd18e976[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 21:22:33 2026 +0800
+
+    chore: epochs back to 150 for 3 checkpoint snapshots
+
+[33mcommit 25243d21be5d27ee82fef5071ecb853efc4e2262[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 21:09:46 2026 +0800
+
+    feat: val_frac=0.0, epochs=100, periodic checkpoints (--save_every 50)
+
+[33mcommit 54caa3c33c0603fa4213b653108e0225008e16d4[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 21:05:08 2026 +0800
+
+    fix: restore val_frac=0.10 and epochs=150 for checkpoint selection
+
+[33mcommit 83909f994e0d388b2aca30e692cfa15cddc16458[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 20:30:09 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-4_ep200_run10
+
+[33mcommit 468c32933b9c738052f136924abeef48f659d53a[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 16:02:20 2026 +0800
+
+    pipeline: convnext_bs2_lr1e-4_wd1e-4_ep200_run9
+
+[33mcommit 4c0dece8909a63f70b01f48db2cf026be39d3bb0[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 15:41:30 2026 +0800
+
+    fix: allow zero validation images in make_splits
+
+[33mcommit 3530ce679de4e596bf08837b2a05255dd29c6d03[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 15:18:03 2026 +0800
+
+    feat: train on all 209 images, OOM auto-halving, BS default 2
+
+[33mcommit 802b4a9d3d9fd9631251439ee55db7b0637e8524[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 15:06:44 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-4_ep200_run3
+
+[33mcommit 2c41e99d14c4701a4e2cd835b93deb59506dbcc8[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 12:16:08 2026 +0800
+
+    tune: box_reg weight 2x, extend to 200 epochs
+
+[33mcommit e1597418dbafc3b338d5f47c3ead0837b2c88702[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 04:22:45 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-4_ep150_run2
+
+[33mcommit b4b32495bc9711c6ad2a29b4966eb7c8b2fa2b05[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 01:21:54 2026 +0800
+
+    fix: weight box_reg loss 3x, extend ConvNeXt training to 150 epochs
+
+[33mcommit b6d45053aea9e5ffa8c1ec636fe4ef20d050ba7d[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Thu Apr 30 01:11:32 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-4_ep100_run1
+
+[33mcommit 4dce610412b86fd0ca57399245606ee9ed3cc3f3[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 22:58:05 2026 +0800
+
+    Update convnext
+
+[33mcommit 582b4f735f6f47dda0ba977bf2d7d2c981383eb6[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 22:42:13 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-4_ep100
+
+[33mcommit cc9f5583aede32897ad129641d51a3e0b2c5e7eb[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 20:56:27 2026 +0800
+
+    Update convnext
+
+[33mcommit 9cf03ba726896a9a801570b4ef459354bfe235bc[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 18:11:32 2026 +0800
+
+    pipeline: convnext_bs1_lr1e-4_wd1e-4_ep100
+
+[33mcommit 4ce96fba2e7d88b439cd6b45db41f7ced4a8fa9d[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 16:15:13 2026 +0800
+
+    pipeline: v2_bs2_lr1e-4_wd1e-4_ep100
+
+[33mcommit 9e3cd0442536cd24e936fd12d6e54df752b94c2f[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 15:10:07 2026 +0800
+
+    Prepare for runpod convnext
+
+[33mcommit da1db620f53d2d2b13e23d4d65f8dd28bbed089a[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 14:40:09 2026 +0800
+
+    Prepare for runpod convnext
+
+[33mcommit 7034365387237b27e1dccde10c2d096c2f69a586[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 13:56:18 2026 +0800
+
+    pipeline: convnext_bs2_lr1e-4_wd1e-4_ep100
+
+[33mcommit 6a78826fe22db80c7ff1532f7ff726a42a204d2f[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 13:31:51 2026 +0800
+
+    Prepare for labs pc
+
+[33mcommit 884b96b26addabf1eb2b5d380bfbd89265d14386[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 03:07:51 2026 +0800
+
+    pipeline: convnext_bs2_lr1e-4_wd1e-4_ep100
+
+[33mcommit 9d0f9fd4805dc2d048f5d5e8d82465118af14f84[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 01:32:53 2026 +0800
+
+    Prepare for labs pc
+
+[33mcommit 29303a4baf16df45da086337a1f833bd419c4794[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 01:19:13 2026 +0800
+
+    Major Update
+
+[33mcommit b1f831c482e18d28e5030ab1bfdc0305f1daab2a[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Wed Apr 29 00:34:53 2026 +0800
+
+    Major Update
+
+[33mcommit 056defdcb9fc664de48e0463ed14542512e693ce[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 16:14:54 2026 +0000
+
+    Auto-save: Done training v2_bs6_lr1e-4_wd1e-4_ep100_runpod
+
+[33mcommit 97737ca7f810458cc8d2ca5be3ed3966f60f58a4[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 14:14:23 2026 +0000
+
+    Auto-save: Done training bs6_lr1e-4_wd1e-4_ep100_runpod
+
+[33mcommit 78ca32d0e8aa078ab380dc68da767e8121111fa6[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 21:36:22 2026 +0800
+
+    Major Update
+
+[33mcommit db4de0ae8802d71224c09981f15349e60a67835f[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 21:30:56 2026 +0800
+
+    Major Update
+
+[33mcommit 469c291f7cdc161a93892fe6cf11668f1717fbf8[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 21:25:22 2026 +0800
+
+    Major Update
+
+[33mcommit 749ac335d1d4d59047b234002d2f7b4ec5d687a5[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 21:10:45 2026 +0800
+
+    Major Update
+
+[33mcommit c189cfccb45b3235239f2b9f72ed62b1952c53a3[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 21:01:09 2026 +0800
+
+    Update
+
+[33mcommit 12a73bfae13a3015eb44e203b320ddb7e4b5d7d7[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 20:52:51 2026 +0800
+
+    Update
+
+[33mcommit 028d46a1ae03e514b7e25bb7699be1387d8521d1[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 20:35:00 2026 +0800
+
+    Major fix for runpod
+
+[33mcommit ad5d972cb6c79c2ac48fcadfd178a81f7dae5f63[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 20:10:08 2026 +0800
+
+    Major fix for runpod
+
+[33mcommit 43bb8262035c1dd59f0d51bb21aca407f2c2d47f[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 20:05:19 2026 +0800
+
+    Update
+
+[33mcommit 4838646b581fcc81df8d9c4d747318d4a5bed0c5[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 20:02:58 2026 +0800
+
+    Update
+
+[33mcommit a3df82ae1be89bf2e51e6eb4128b69147c923b7d[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 19:59:58 2026 +0800
+
+    Update
+
+[33mcommit 5e13aec82366985a507cf4d5b161461631fe3301[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 19:58:55 2026 +0800
+
+    Update
+
+[33mcommit 1b6de5b326e44315e5a90106baae1f739ca93a35[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 19:48:39 2026 +0800
+
+    Prepare for runpod
+
+[33mcommit dd04ed6ca72658c529913725a8afc3a41e9be828[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 15:26:01 2026 +0800
+
+    pipeline: bs1_lr1e-4_wd1e-4
+
+[33mcommit cac838cab56677334a178ae2581ebfbbb5dcecac[m
+Author: Rayhan <rayhanhaqi@github.com>
+Date:   Tue Apr 28 13:52:01 2026 +0800
+
+    first commit
