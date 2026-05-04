@@ -33,6 +33,7 @@ def parse_args():
     p.add_argument("--tta", action="store_true", default=False, help="Horizontal flip test-time augmentation")
     p.add_argument("--ms_tta", action="store_true", default=False, help="Multi-scale TTA (640/800/960) min_size")
     p.add_argument("--tta_iou_thresh", type=float, default=0.5, help="NMS IoU threshold for TTA merge")
+    p.add_argument("--tag", type=str, default="", help="Suffix for output ZIP filename")
     p.add_argument("--gpu", type=int, default=0)
 
     return p.parse_args()
@@ -200,14 +201,14 @@ def main():
                 img_t = img_t.to(device)
                 W = img_t.shape[-1]
 
-                merged = _to_cpu(model([img_t])[0])  # → CPU
+                cpu_outputs = [_to_cpu(model([img_t])[0])]
 
                 if args.tta:
                     flipped = torch.flip(img_t, dims=[-1])
                     flipped_out = model([flipped])[0]
                     unflipped = hflip_predictions([flipped_out], [W])[0]
                     del flipped_out
-                    merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
+                    cpu_outputs.append(_to_cpu(unflipped))
                     del unflipped
 
                 if args.ms_tta:
@@ -220,19 +221,22 @@ def main():
                                 image_std=orig_transform.image_std,
                             )
                             out = model([img_t])[0]
-                            merged = _merge_outputs([merged, _to_cpu(out)], iou_thresh=args.tta_iou_thresh)
+                            cpu_outputs.append(_to_cpu(out))
                             del out
                             if args.tta:
                                 flipped_out = model([flipped])[0]
                                 unflipped = hflip_predictions([flipped_out], [W])[0]
                                 del flipped_out
-                                merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
+                                cpu_outputs.append(_to_cpu(unflipped))
                                 del unflipped
                     finally:
                         model.transform = orig_transform
 
-                output = merged  # already on CPU
-                del merged
+                if len(cpu_outputs) > 1:
+                    output = _merge_outputs(cpu_outputs, iou_thresh=args.tta_iou_thresh)
+                else:
+                    output = cpu_outputs[0]
+                del cpu_outputs
 
                 boxes = output["boxes"].cpu().numpy()
                 scores = output["scores"].cpu().numpy()
@@ -274,6 +278,8 @@ def main():
         suffix += "_tta"
     if args.ms_tta:
         suffix += "_ms"
+    if args.tag:
+        suffix += "_" + args.tag
     zip_path = out_dir / f"{stem}{suffix}_HW3.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(json_path, arcname="test-results.json")
