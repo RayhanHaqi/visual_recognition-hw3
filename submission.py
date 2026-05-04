@@ -90,10 +90,10 @@ def merge_tta(orig, flipped, iou_thresh=0.5):
 
 
 def _merge_outputs(outputs, iou_thresh):
-    boxes = torch.cat([o["boxes"].cpu() for o in outputs], dim=0)
-    scores = torch.cat([o["scores"].cpu() for o in outputs], dim=0)
-    labels = torch.cat([o["labels"].cpu() for o in outputs], dim=0)
-    masks_list = [o["masks"].cpu() for o in outputs]
+    boxes = torch.cat([o["boxes"] for o in outputs], dim=0)
+    scores = torch.cat([o["scores"] for o in outputs], dim=0)
+    labels = torch.cat([o["labels"] for o in outputs], dim=0)
+    masks_list = [o["masks"] for o in outputs]
 
     target_shape = masks_list[0].shape[-2:]
     for i, m in enumerate(masks_list):
@@ -190,14 +190,14 @@ def main():
                 img_t = img_t.to(device)
                 W = img_t.shape[-1]
 
-                merged = _to_cpu(model([img_t])[0])
+                merged = model([img_t])[0]  # on GPU
 
                 if args.tta:
                     flipped = torch.flip(img_t, dims=[-1])
                     flipped_out = model([flipped])[0]
                     unflipped = hflip_predictions([flipped_out], [W])[0]
                     del flipped_out
-                    merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
+                    merged = _merge_outputs([merged, unflipped], iou_thresh=args.tta_iou_thresh)
                     del unflipped
 
                 if args.ms_tta:
@@ -210,18 +210,19 @@ def main():
                                 image_std=orig_transform.image_std,
                             )
                             out = model([img_t])[0]
-                            merged = _merge_outputs([merged, _to_cpu(out)], iou_thresh=args.tta_iou_thresh)
+                            merged = _merge_outputs([merged, out], iou_thresh=args.tta_iou_thresh)
                             del out
                             if args.tta:
                                 flipped_out = model([flipped])[0]
                                 unflipped = hflip_predictions([flipped_out], [W])[0]
                                 del flipped_out
-                                merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
+                                merged = _merge_outputs([merged, unflipped], iou_thresh=args.tta_iou_thresh)
                                 del unflipped
                     finally:
                         model.transform = orig_transform
 
-                output = merged
+                output = _to_cpu(merged)  # GPU→CPU once
+                del merged
 
                 boxes = output["boxes"].cpu().numpy()
                 scores = output["scores"].cpu().numpy()
