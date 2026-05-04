@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torchvision.models.detection.transform import GeneralizedRCNNTransform
 from torchvision.ops import nms
 
@@ -90,7 +91,13 @@ def _merge_outputs(outputs, iou_thresh):
     boxes = torch.cat([o["boxes"].cpu() for o in outputs], dim=0)
     scores = torch.cat([o["scores"].cpu() for o in outputs], dim=0)
     labels = torch.cat([o["labels"].cpu() for o in outputs], dim=0)
-    masks = torch.cat([o["masks"].cpu() for o in outputs], dim=0)
+    masks_list = [o["masks"].cpu() for o in outputs]
+
+    target_shape = masks_list[0].shape[-2:]
+    for i, m in enumerate(masks_list):
+        if m.shape[-2:] != target_shape:
+            masks_list[i] = F.interpolate(m, size=target_shape, mode="bilinear", align_corners=False)
+    masks = torch.cat(masks_list, dim=0)
     keep_all = []
     for c in labels.unique():
         idx = (labels == c).nonzero(as_tuple=True)[0]
