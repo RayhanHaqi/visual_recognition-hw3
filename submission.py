@@ -184,14 +184,14 @@ def main():
             img_t = img_t.to(device)
             W = img_t.shape[-1]
 
-            all_outputs = [_to_cpu(model([img_t])[0])]
+            merged = _to_cpu(model([img_t])[0])
 
             if args.tta:
                 flipped = torch.flip(img_t, dims=[-1])
                 flipped_out = model([flipped])[0]
                 unflipped = hflip_predictions([flipped_out], [W])[0]
                 del flipped_out
-                all_outputs.append(_to_cpu(unflipped))
+                merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
                 del unflipped
 
             if args.ms_tta:
@@ -204,21 +204,18 @@ def main():
                             image_std=orig_transform.image_std,
                         )
                         out = model([img_t])[0]
-                        all_outputs.append(_to_cpu(out))
+                        merged = _merge_outputs([merged, _to_cpu(out)], iou_thresh=args.tta_iou_thresh)
                         del out
                         if args.tta:
                             flipped_out = model([flipped])[0]
                             unflipped = hflip_predictions([flipped_out], [W])[0]
                             del flipped_out
-                            all_outputs.append(_to_cpu(unflipped))
+                            merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
                             del unflipped
                 finally:
                     model.transform = orig_transform
 
-            if len(all_outputs) > 1:
-                output = _merge_outputs(all_outputs, iou_thresh=args.tta_iou_thresh)
-            else:
-                output = all_outputs[0]
+            output = merged
 
             boxes = output["boxes"].cpu().numpy()
             scores = output["scores"].cpu().numpy()
