@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 import torch
 import torch.nn.functional as F
 from torchvision.models.detection.transform import GeneralizedRCNNTransform
@@ -169,7 +170,7 @@ def main():
 
     results = []
     with torch.no_grad():
-        for fpath in sorted(test_dir.glob("*.tif")):
+        for fpath in tqdm(sorted(test_dir.glob("*.tif")), desc="infer"):
             fname = fpath.name
             if fname not in id_map:
                 print(f"WARN: {fname} not in id map; skipping")
