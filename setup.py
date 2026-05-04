@@ -100,11 +100,18 @@ def _upgrade_pytorch_if_blackwell():
         return
     cap = torch.cuda.get_device_capability()
     if cap is not None and cap[0] >= 12:
-        print(f"RTX 5090 detected (sm_{cap[0]}{cap[1]}). Upgrading PyTorch for Blackwell support...")
+        print(f"RTX 5090 detected (sm_{cap[0]}{cap[1]}). Installing PyTorch nightly for Blackwell...")
         subprocess.run(
-            ["pip", "install", "-q", "--upgrade", "torch", "torchvision", "timm"],
+            ["pip", "install", "-q", "--pre", "torch", "torchvision",
+             "--index-url", "https://download.pytorch.org/whl/nightly/cu128",
+             "--force-reinstall"],
             check=False,
         )
+        subprocess.run(
+            ["pip", "install", "-q", "--no-deps", "--force-reinstall", "timm"],
+            check=False,
+        )
+        print("PyTorch nightly installed for RTX 5090.")
 
 
 def chmod_scripts():
