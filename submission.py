@@ -1,4 +1,5 @@
 import argparse
+import gc
 import json
 import zipfile
 from pathlib import Path
@@ -168,80 +169,93 @@ def main():
     id_map = _load_id_map(args.ids_json)
     test_dir = Path(args.test_path)
 
-    results = []
-    with torch.no_grad():
-        for fpath in tqdm(sorted(test_dir.glob("*.tif")), desc="infer"):
-            fname = fpath.name
-            if fname not in id_map:
-                print(f"WARN: {fname} not in id map; skipping")
-                continue
-            image_id = id_map[fname]
-            arr = _read_tif(fpath)
-            if arr.ndim == 2:
-                arr = np.stack([arr] * 3, axis=-1)
-            if arr.shape[-1] == 4:
-                arr = arr[..., :3]
-            img_t = torch.from_numpy(arr.astype(np.uint8)).permute(2, 0, 1).float() / 255.0
-            img_t = img_t.to(device)
-            W = img_t.shape[-1]
-
-            merged = _to_cpu(model([img_t])[0])
-
-            if args.tta:
-                flipped = torch.flip(img_t, dims=[-1])
-                flipped_out = model([flipped])[0]
-                unflipped = hflip_predictions([flipped_out], [W])[0]
-                del flipped_out
-                merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
-                del unflipped
-
-            if args.ms_tta:
-                orig_transform = model.transform
-                try:
-                    for s in [640, 960]:
-                        model.transform = GeneralizedRCNNTransform(
-                            min_size=s, max_size=args.max_size or max_size,
-                            image_mean=orig_transform.image_mean,
-                            image_std=orig_transform.image_std,
-                        )
-                        out = model([img_t])[0]
-                        merged = _merge_outputs([merged, _to_cpu(out)], iou_thresh=args.tta_iou_thresh)
-                        del out
-                        if args.tta:
-                            flipped_out = model([flipped])[0]
-                            unflipped = hflip_predictions([flipped_out], [W])[0]
-                            del flipped_out
-                            merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
-                            del unflipped
-                finally:
-                    model.transform = orig_transform
-
-            output = merged
-
-            boxes = output["boxes"].cpu().numpy()
-            scores = output["scores"].cpu().numpy()
-            labels = output["labels"].cpu().numpy()
-            masks = output["masks"].cpu().numpy()
-            if masks.ndim == 4:
-                masks = masks[:, 0]
-            keep = scores >= args.score_thresh
-            boxes, scores, labels, masks = boxes[keep], scores[keep], labels[keep], masks[keep]
-            for i in range(boxes.shape[0]):
-                bin_mask = (masks[i] >= args.mask_thresh).astype(np.uint8)
-                if bin_mask.sum() == 0:
-                    continue
-                results.append({
-                    "image_id": image_id,
-                    "bbox": _xyxy_to_xywh(boxes[i]),
-                    "score": float(scores[i]),
-                    "category_id": int(labels[i]),
-                    "segmentation": encode_binary_mask(bin_mask),
-                })
-
     json_path = out_dir / "test-results.json"
+    jsonl_path = out_dir / "test-results.jsonl"
+
+    total = 0
+    with jsonl_path.open("w") as fh:
+        with torch.no_grad():
+            for fpath in tqdm(sorted(test_dir.glob("*.tif")), desc="infer"):
+                fname = fpath.name
+                if fname not in id_map:
+                    print(f"WARN: {fname} not in id map; skipping")
+                    continue
+                image_id = id_map[fname]
+                arr = _read_tif(fpath)
+                if arr.ndim == 2:
+                    arr = np.stack([arr] * 3, axis=-1)
+                if arr.shape[-1] == 4:
+                    arr = arr[..., :3]
+                img_t = torch.from_numpy(arr.astype(np.uint8)).permute(2, 0, 1).float() / 255.0
+                img_t = img_t.to(device)
+                W = img_t.shape[-1]
+
+                merged = _to_cpu(model([img_t])[0])
+
+                if args.tta:
+                    flipped = torch.flip(img_t, dims=[-1])
+                    flipped_out = model([flipped])[0]
+                    unflipped = hflip_predictions([flipped_out], [W])[0]
+                    del flipped_out
+                    merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
+                    del unflipped
+
+                if args.ms_tta:
+                    orig_transform = model.transform
+                    try:
+                        for s in [640, 960]:
+                            model.transform = GeneralizedRCNNTransform(
+                                min_size=s, max_size=args.max_size or max_size,
+                                image_mean=orig_transform.image_mean,
+                                image_std=orig_transform.image_std,
+                            )
+                            out = model([img_t])[0]
+                            merged = _merge_outputs([merged, _to_cpu(out)], iou_thresh=args.tta_iou_thresh)
+                            del out
+                            if args.tta:
+                                flipped_out = model([flipped])[0]
+                                unflipped = hflip_predictions([flipped_out], [W])[0]
+                                del flipped_out
+                                merged = _merge_outputs([merged, _to_cpu(unflipped)], iou_thresh=args.tta_iou_thresh)
+                                del unflipped
+                    finally:
+                        model.transform = orig_transform
+
+                output = merged
+
+                boxes = output["boxes"].cpu().numpy()
+                scores = output["scores"].cpu().numpy()
+                labels = output["labels"].cpu().numpy()
+                masks = output["masks"].cpu().numpy()
+                if masks.ndim == 4:
+                    masks = masks[:, 0]
+                keep = scores >= args.score_thresh
+                boxes, scores, labels, masks = boxes[keep], scores[keep], labels[keep], masks[keep]
+                for i in range(boxes.shape[0]):
+                    bin_mask = (masks[i] >= args.mask_thresh).astype(np.uint8)
+                    if bin_mask.sum() == 0:
+                        continue
+                    fh.write(json.dumps({
+                        "image_id": image_id,
+                        "bbox": _xyxy_to_xywh(boxes[i]),
+                        "score": float(scores[i]),
+                        "category_id": int(labels[i]),
+                        "segmentation": encode_binary_mask(bin_mask),
+                    }) + "\n")
+                    total += 1
+                del merged, output, boxes, scores, labels, masks
+                gc.collect()
+
+    # Convert JSONL to JSON
+    results = []
+    with jsonl_path.open() as fh:
+        for line in fh:
+            results.append(json.loads(line))
+    jsonl_path.unlink()
+
     with json_path.open("w") as f:
         json.dump(results, f)
-    print(f"Wrote {len(results)} predictions to {json_path}")
+    print(f"Wrote {total} predictions to {json_path}")
 
     stem = Path(args.checkpoint).stem
     suffix = ""
