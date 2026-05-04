@@ -87,10 +87,10 @@ def merge_tta(orig, flipped, iou_thresh=0.5):
 
 
 def _merge_outputs(outputs, iou_thresh):
-    boxes = torch.cat([o["boxes"] for o in outputs], dim=0)
-    scores = torch.cat([o["scores"] for o in outputs], dim=0)
-    labels = torch.cat([o["labels"] for o in outputs], dim=0)
-    masks = torch.cat([o["masks"] for o in outputs], dim=0)
+    boxes = torch.cat([o["boxes"].cpu() for o in outputs], dim=0)
+    scores = torch.cat([o["scores"].cpu() for o in outputs], dim=0)
+    labels = torch.cat([o["labels"].cpu() for o in outputs], dim=0)
+    masks = torch.cat([o["masks"].cpu() for o in outputs], dim=0)
     keep_all = []
     for c in labels.unique():
         idx = (labels == c).nonzero(as_tuple=True)[0]
