@@ -5,6 +5,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torchvision.models.detection.transform import GeneralizedRCNNTransform
+from torchvision.ops import nms
 
 from data.dataset import _read_tif
 from model.build import build_maskrcnn
@@ -25,6 +27,9 @@ def parse_args():
                    help="Comma-separated sizes, e.g. '8,16,32,64,128'")
     p.add_argument("--box_detections_per_img", type=int, default=100)
     p.add_argument("--backbone", type=str, default=None, choices=["resnet50", "convnext_base"])
+    p.add_argument("--tta", action="store_true", default=False, help="Horizontal flip test-time augmentation")
+    p.add_argument("--ms_tta", action="store_true", default=False, help="Multi-scale TTA (640/800/960) min_size")
+    p.add_argument("--tta_iou_thresh", type=float, default=0.5, help="NMS IoU threshold for TTA merge")
     p.add_argument("--gpu", type=int, default=0)
 
     return p.parse_args()
@@ -39,6 +44,65 @@ def _load_id_map(ids_json):
     with open(ids_json) as f:
         entries = json.load(f)
     return {e["file_name"]: int(e["id"]) for e in entries}
+
+
+def hflip_predictions(preds, image_widths):
+    out = []
+    for pred, w in zip(preds, image_widths):
+        boxes = pred["boxes"].clone()
+        x1 = boxes[:, 0].clone()
+        x2 = boxes[:, 2].clone()
+        boxes[:, 0] = w - x2
+        boxes[:, 2] = w - x1
+        masks = torch.flip(pred["masks"], dims=[-1])
+        out.append({
+            "boxes": boxes,
+            "scores": pred["scores"],
+            "labels": pred["labels"],
+            "masks": masks,
+        })
+    return out
+
+
+def merge_tta(orig, flipped, iou_thresh=0.5):
+    merged = []
+    for o, f in zip(orig, flipped):
+        boxes = torch.cat([o["boxes"], f["boxes"]], dim=0)
+        scores = torch.cat([o["scores"], f["scores"]], dim=0)
+        labels = torch.cat([o["labels"], f["labels"]], dim=0)
+        masks = torch.cat([o["masks"], f["masks"]], dim=0)
+        keep_all = []
+        for c in labels.unique():
+            idx = (labels == c).nonzero(as_tuple=True)[0]
+            keep = nms(boxes[idx], scores[idx], iou_thresh)
+            keep_all.append(idx[keep])
+        keep_all = torch.cat(keep_all) if keep_all else torch.zeros((0,), dtype=torch.long)
+        merged.append({
+            "boxes": boxes[keep_all],
+            "scores": scores[keep_all],
+            "labels": labels[keep_all],
+            "masks": masks[keep_all],
+        })
+    return merged
+
+
+def _merge_outputs(outputs, iou_thresh):
+    boxes = torch.cat([o["boxes"] for o in outputs], dim=0)
+    scores = torch.cat([o["scores"] for o in outputs], dim=0)
+    labels = torch.cat([o["labels"] for o in outputs], dim=0)
+    masks = torch.cat([o["masks"] for o in outputs], dim=0)
+    keep_all = []
+    for c in labels.unique():
+        idx = (labels == c).nonzero(as_tuple=True)[0]
+        keep = nms(boxes[idx], scores[idx], iou_thresh)
+        keep_all.append(idx[keep])
+    keep_all = torch.cat(keep_all) if keep_all else torch.zeros((0,), dtype=torch.long)
+    return {
+        "boxes": boxes[keep_all],
+        "scores": scores[keep_all],
+        "labels": labels[keep_all],
+        "masks": masks[keep_all],
+    }
 
 
 def main():
@@ -106,11 +170,44 @@ def main():
             if arr.shape[-1] == 4:
                 arr = arr[..., :3]
             img_t = torch.from_numpy(arr.astype(np.uint8)).permute(2, 0, 1).float() / 255.0
-            outputs = model([img_t.to(device)])[0]
-            boxes = outputs["boxes"].cpu().numpy()
-            scores = outputs["scores"].cpu().numpy()
-            labels = outputs["labels"].cpu().numpy()
-            masks = outputs["masks"].cpu().numpy()
+            img_t = img_t.to(device)
+            W = img_t.shape[-1]
+
+            all_outputs = [model([img_t])[0]]
+
+            if args.tta:
+                flipped = torch.flip(img_t, dims=[-1])
+                flipped_out = model([flipped])[0]
+                unflipped = hflip_predictions([flipped_out], [W])
+                all_outputs.append(unflipped[0])
+
+            if args.ms_tta:
+                orig_transform = model.transform
+                try:
+                    for s in [640, 960]:
+                        model.transform = GeneralizedRCNNTransform(
+                            min_size=s, max_size=args.max_size or max_size,
+                            image_mean=orig_transform.image_mean,
+                            image_std=orig_transform.image_std,
+                        )
+                        out = model([img_t])[0]
+                        all_outputs.append(out)
+                        if args.tta:
+                            flipped_out = model([flipped])[0]
+                            unflipped = hflip_predictions([flipped_out], [W])
+                            all_outputs.append(unflipped[0])
+                finally:
+                    model.transform = orig_transform
+
+            if len(all_outputs) > 1:
+                output = _merge_outputs(all_outputs, iou_thresh=args.tta_iou_thresh)
+            else:
+                output = all_outputs[0]
+
+            boxes = output["boxes"].cpu().numpy()
+            scores = output["scores"].cpu().numpy()
+            labels = output["labels"].cpu().numpy()
+            masks = output["masks"].cpu().numpy()
             if masks.ndim == 4:
                 masks = masks[:, 0]
             keep = scores >= args.score_thresh
@@ -133,7 +230,12 @@ def main():
     print(f"Wrote {len(results)} predictions to {json_path}")
 
     stem = Path(args.checkpoint).stem
-    zip_path = out_dir / f"{stem}_HW3.zip"
+    suffix = ""
+    if args.tta:
+        suffix += "_tta"
+    if args.ms_tta:
+        suffix += "_ms"
+    zip_path = out_dir / f"{stem}{suffix}_HW3.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(json_path, arcname="test-results.json")
     print(f"Zipped submission to {zip_path}")
