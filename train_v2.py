@@ -2,6 +2,7 @@ import argparse
 import csv
 import os
 import random
+import json
 import time
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from data.dataset import (
     build_val_transform,
     collate_fn,
     make_splits,
+    generate_kfold_splits,
 )
 from model.build import build_maskrcnn, count_trainable_params
 from utils.coco_eval import build_coco_gt, evaluate_segm, predictions_to_coco_results
@@ -59,11 +61,13 @@ def parse_args():
     p.add_argument("--ema_decay", type=float, default=0.9998)
     p.add_argument("--grad_clip", type=float, default=10.0)
     p.add_argument("--save_top_k", type=int, default=3)
-    p.add_argument("--save_every", type=int, default=25, help="Save periodic checkpoint every N epochs when val_frac=0.0")
+    p.add_argument("--save_every", type=int, default=50, help="Save periodic checkpoint every N epochs when val_frac=0.0")
     p.add_argument("--tta", action="store_true", default=False)
     p.add_argument("--multi_scale", action="store_true", default=False)
     p.add_argument("--best_only", action="store_true", default=False, help="Only save best checkpoint, no _last or top-k")
     p.add_argument("--backbone", type=str, default="resnet50", choices=["resnet50", "convnext_base"])
+    p.add_argument("--kfold_splits", type=str, default=None, help="Path to kfold_splits.json from generate_kfold_splits")
+    p.add_argument("--fold_idx", type=int, default=None, help="Fold index (0..K-1) to use as validation fold")
     return p.parse_args()
 
 
@@ -153,7 +157,16 @@ def main(bs_override=None):
     Path(args.save_path).mkdir(parents=True, exist_ok=True)
     Path(args.log_path).mkdir(parents=True, exist_ok=True)
 
-    train_ids, val_ids = make_splits(args.data_path, seed=args.seed, val_frac=args.val_frac)
+    if args.kfold_splits is not None and args.fold_idx is not None:
+        kfold_data = json.loads(Path(args.kfold_splits).read_text())
+        fold_key = f"fold_{args.fold_idx}"
+        if fold_key not in kfold_data:
+            raise KeyError(f"Fold {args.fold_idx} not in {args.kfold_splits}. Available: {list(kfold_data.keys())}")
+        train_ids = kfold_data[fold_key]["train"]
+        val_ids = kfold_data[fold_key]["val"]
+        args.val_frac = -1.0
+    else:
+        train_ids, val_ids = make_splits(args.data_path, seed=args.seed, val_frac=args.val_frac)
     train_ds = CellInstanceDataset(args.data_path, train_ids, transform=build_train_transform_v2())
     has_val = len(val_ids) > 0
     val_ds = CellInstanceDataset(args.data_path, val_ids, transform=build_val_transform()) if has_val else None
@@ -212,7 +225,11 @@ def main(bs_override=None):
     import pickle
     coco_gt = None
     if is_main() and has_val:
-        cache_path = Path(args.data_path).parent / f"coco_gt_s{args.seed}_f{args.val_frac}.pkl"
+        if args.val_frac == -1.0:
+            cache_name = f"coco_gt_kfold_fold{args.fold_idx}.pkl"
+        else:
+            cache_name = f"coco_gt_s{args.seed}_f{args.val_frac}.pkl"
+        cache_path = Path(args.data_path).parent / cache_name
         if cache_path.exists():
             coco_gt = pickle.loads(cache_path.read_bytes())
             print("Loaded cached COCO ground truth.")
@@ -323,7 +340,7 @@ def main(bs_override=None):
                 torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_last.pth")
 
             if not has_val:
-                if epoch >= 50 and epoch % 50 == 0:
+                if epoch >= args.save_every and epoch % args.save_every == 0:
                     if ema is not None:
                         backup = ema.apply_to(target_module)
                     torch.save(last_ckpt, Path(args.save_path) / f"{args.run_name}_ep{epoch:03d}.pth")
