@@ -20,7 +20,7 @@ BATCH_SIZE=2
 LR=2e-4
 WD=2e-3
 PCT_START=0.5
-GPU=${1:-0}
+GPU=${1:-1}
 DATA_PATH="datasets/train"
 KFOLD_SPLITS="log/kfold_splits.json"
 
