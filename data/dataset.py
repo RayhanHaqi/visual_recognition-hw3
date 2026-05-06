@@ -1,5 +1,6 @@
 import os
 import random
+import json
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +37,57 @@ def make_splits(root, seed=42, val_frac=0.15):
     val_ids = sorted(folders[:n_val])
     train_ids = sorted(folders[n_val:])
     return train_ids, val_ids
+
+
+def _compute_class_counts(sample_dir):
+    counts = []
+    for fname in CLASS_FILES:
+        mask_path = Path(sample_dir) / fname
+        if mask_path.exists():
+            mask_arr = _read_tif(mask_path)
+            if mask_arr.ndim == 3:
+                mask_arr = mask_arr[..., 0]
+            inst_ids = np.unique(mask_arr)
+            counts.append(int((inst_ids != 0).sum()))
+        else:
+            counts.append(0)
+    return counts
+
+
+def generate_kfold_splits(root, k=5, seed=42, output_path=None):
+    from sklearn.model_selection import StratifiedKFold
+
+    root = Path(root)
+    folders = sorted(p for p in root.iterdir() if p.is_dir())
+
+    distributions = []
+    for folder in folders:
+        counts = _compute_class_counts(root / folder)
+        distributions.append(counts)
+
+    dist_array = np.array(distributions)
+    bins = [0, 1, 5, 9999]
+    labels = np.zeros(len(folders), dtype=int)
+    multiplier = 1
+    for c in range(4):
+        binned = np.digitize(dist_array[:, c], bins)
+        labels += binned * multiplier
+        multiplier *= len(bins)
+
+    skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
+    splits = {}
+    for fold_idx, (train_idx, val_idx) in enumerate(skf.split(folders, labels)):
+        splits[f"fold_{fold_idx}"] = {
+            "train": [folders[i] for i in train_idx],
+            "val": [folders[i] for i in val_idx],
+        }
+
+    if output_path is not None:
+        out_file = Path(output_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(json.dumps(splits, indent=2))
+
+    return splits
 
 
 def build_train_transform():
