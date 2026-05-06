@@ -76,10 +76,11 @@ def generate_kfold_splits(root, k=5, seed=42, output_path=None):
 
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
     splits = {}
+    folder_names = [f.name for f in folders]
     for fold_idx, (train_idx, val_idx) in enumerate(skf.split(folders, labels)):
         splits[f"fold_{fold_idx}"] = {
-            "train": [folders[i] for i in train_idx],
-            "val": [folders[i] for i in val_idx],
+            "train": [folder_names[i] for i in train_idx],
+            "val": [folder_names[i] for i in val_idx],
         }
 
     if output_path is not None:
