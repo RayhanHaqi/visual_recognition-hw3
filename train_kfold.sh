@@ -62,7 +62,9 @@ for FOLD in $(seq 0 $((K-1))); do
         --gpu ${GPU} \
         --seed ${SEED} \
         --kfold_splits ${KFOLD_SPLITS} \
-        --fold_idx ${FOLD}
+        --fold_idx ${FOLD} \
+        --patience 99999 \
+        --best_only
 
     # Extract best AP50 and epoch from CSV
     FOLD_CSV="log/${RUN_NAME}.csv"
