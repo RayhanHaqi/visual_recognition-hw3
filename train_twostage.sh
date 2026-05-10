@@ -17,7 +17,7 @@ BATCH_SIZE=2
 LR=1e-3
 WD=5e-3
 PCT_START=0.5
-VAL_FRAC=0.2
+VAL_FRAC=0.3
 GPU=${1:-1}
 DATA_PATH="datasets/train"
 
