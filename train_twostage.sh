@@ -82,7 +82,7 @@ python train_v2.py \
 # Stage 3: Generate submission
 echo ""
 echo "[3/3] Generating submission..."
-FINAL_CKPT="checkpoints/${FINAL_NAME}_ep${TARGET_EPOCHS}.pth"
+FINAL_CKPT="checkpoints/${FINAL_NAME}_ep$(printf "%03d" ${TARGET_EPOCHS}).pth"
 
 if [ -f "${FINAL_CKPT}" ]; then
     echo "  Submitting: ${FINAL_CKPT}"
