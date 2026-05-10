@@ -13,7 +13,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 SEED=42
 EPOCHS=100
 BACKBONE=convnext_base
-BATCH_SIZE=4
+BATCH_SIZE=2
 LR=5e-4
 WD=2e-3
 PCT_START=0.5
@@ -44,7 +44,8 @@ python train_v2.py \
     --seed ${SEED} \
     --val_frac ${VAL_FRAC} \
     --patience 99999 \
-    --best_only
+    --best_only \
+    --workers 12
 
 STAGE1_CSV="log/${STAGE1_NAME}.csv"
 if [ ! -f "${STAGE1_CSV}" ]; then
@@ -75,7 +76,8 @@ python train_v2.py \
     --pct_start ${PCT_START} \
     --gpu ${GPU} \
     --seed ${SEED} \
-    --val_frac 0.0
+    --val_frac 0.0 \
+    --workers 12
 
 # Stage 3: Generate submission
 echo ""
