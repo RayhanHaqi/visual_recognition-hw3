@@ -148,7 +148,6 @@ def merge_tta(orig, flipped, iou_thresh=0.5):
 
 def main(bs_override=None):
     global _OOM_RESTART_BS
-    torch.backends.cudnn.benchmark = True
     args = parse_args()
     if bs_override is not None:
         args.batch_size = bs_override
