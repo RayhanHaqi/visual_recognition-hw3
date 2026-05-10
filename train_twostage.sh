@@ -45,7 +45,7 @@ python train_v2.py \
     --val_frac ${VAL_FRAC} \
     --patience 99999 \
     --best_only \
-    --workers 12
+    --workers 16
 
 STAGE1_CSV="log/${STAGE1_NAME}.csv"
 if [ ! -f "${STAGE1_CSV}" ]; then
@@ -77,7 +77,7 @@ python train_v2.py \
     --gpu ${GPU} \
     --seed ${SEED} \
     --val_frac 0.0 \
-    --workers 12
+    --workers 16
 
 # Stage 3: Generate submission
 echo ""
