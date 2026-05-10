@@ -148,6 +148,7 @@ def merge_tta(orig, flipped, iou_thresh=0.5):
 
 def main(bs_override=None):
     global _OOM_RESTART_BS
+    torch.backends.cudnn.benchmark = True
     args = parse_args()
     if bs_override is not None:
         args.batch_size = bs_override
@@ -178,15 +179,18 @@ def main(bs_override=None):
     if distributed:
         train_sampler = DistributedSampler(train_ds, shuffle=True, seed=args.seed)
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, sampler=train_sampler,
-                                  num_workers=args.workers, collate_fn=collate_fn, pin_memory=True)
+                                  num_workers=args.workers, collate_fn=collate_fn, pin_memory=True,
+                                  persistent_workers=True)
     else:
         train_sampler = None
         train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,
-                                  num_workers=args.workers, collate_fn=collate_fn, pin_memory=True)
+                                  num_workers=args.workers, collate_fn=collate_fn, pin_memory=True,
+                                  persistent_workers=True)
 
     if has_val:
         val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=args.workers,
-                                collate_fn=collate_fn, pin_memory=True)
+                                collate_fn=collate_fn, pin_memory=True,
+                                persistent_workers=True)
     else:
         val_loader = None
 
