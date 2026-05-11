@@ -11,11 +11,11 @@ set -euo pipefail
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 SEED=42
-EPOCHS=100
+EPOCHS=150
 BACKBONE=convnext_base
 BATCH_SIZE=2
 LR=8e-4
-WD=4e-3
+WD=5e-3
 PCT_START=0.5
 VAL_FRAC=0.3
 GPU=${1:-1}
