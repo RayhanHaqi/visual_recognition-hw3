@@ -53,7 +53,7 @@ if [ ! -f "${STAGE1_CSV}" ]; then
     exit 1
 fi
 
-BEST_ROW=$(tail -n +2 "${STAGE1_CSV}" | sort -t',' -k9 -nr | head -1)
+BEST_ROW=$(tail -n +2 "${STAGE1_CSV}" | tr -d '\r' | sort -t',' -k9 -nr | head -1)
 BEST_AP50=$(echo "${BEST_ROW}" | cut -d',' -f9)
 BEST_EPOCH=$(echo "${BEST_ROW}" | cut -d',' -f1)
 echo "  Best val AP50=${BEST_AP50} at epoch ${BEST_EPOCH}"
