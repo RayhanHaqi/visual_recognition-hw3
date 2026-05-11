@@ -246,7 +246,7 @@ def main(bs_override=None):
     log_file = Path(args.log_path) / f"{args.run_name}.csv"
     if is_main() and not log_file.exists():
         with log_file.open("w", newline="") as f:
-            csv.writer(f).writerow([
+            csv.writer(f, lineterminator='\n').writerow([
                 "epoch", "train_loss",
                 *LOSS_KEYS,
                 "val_AP", "val_AP50", "val_AP75", "lr", "grad_norm", "secs",
@@ -316,7 +316,7 @@ def main(bs_override=None):
             else:
                 print(f"[ep {epoch:03d}] loss={train_loss:.4f}  gn={mean_grad_norm:.2f}  lr={current_lr:.2e}  ({elapsed:.1f}s)")
             with log_file.open("a", newline="") as f:
-                csv.writer(f).writerow([
+                csv.writer(f, lineterminator='\n').writerow([
                     epoch, train_loss,
                     *[comp_means[k] for k in LOSS_KEYS],
                     ap_metrics["AP"], ap_metrics["AP50"], ap_metrics["AP75"],
