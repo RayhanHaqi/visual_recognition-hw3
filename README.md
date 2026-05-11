@@ -17,7 +17,10 @@ Constraints (from the rubric):
 - ImageNet pretraining allowed.
 - No external data.
 
-This implementation uses `torchvision.models.detection.maskrcnn_resnet50_fpn_v2` (~46M params) as the base, with replaced classification + mask heads for 4 cell classes + background.
+This implementation uses ConvNeXt-Base (~107.56M params) as the backbone with Mask R-CNN, replacing
+the classification + mask heads for 4 cell classes + background. Anchor sizes tuned to
+`((8,),(16,),(32,),(64,),(128,))` for small cell instances. Training uses OneCycleLR, AMP mixed
+precision, EMA (decay 0.9998), and AdamW optimizer.
 
 ## Environment Setup
 
@@ -43,42 +46,41 @@ HW3/datasets/
 
 ### Training
 
-**Single-GPU:**
+**Two-stage pipeline (80/30 val split → find best epoch → retrain on all data):**
 ```bash
-python train.py --run_name baseline --batch_size 2 --lr 1e-4 --wd 1e-4 --epochs 50
+bash train_twostage.sh [gpu_id]
 ```
 
-**Multi-GPU (DDP):**
+**Direct training on all 209 images:**
 ```bash
-bash train.sh <bs> <lr> <wd> <gpus> <workers> <epochs>
-# e.g., bash train.sh 2 1e-4 1e-4 2 4 100
+python train_v2.py --run_name <name> --backbone convnext_base --batch_size 2 \
+    --lr 2e-4 --wd 2e-3 --epochs 250 --pct_start 0.5 --gpu 0 --seed 42 \
+    --val_frac 0.0 --workers 16
 ```
 
-**Cloud pod (RunPod):**
+**K-Fold cross-validation (5 folds):**
 ```bash
-bash train-runpod.sh <bs> <lr> <wd> <gpus> <workers> <epochs>
+bash train_kfold.sh [gpu_id]
 ```
 
-Per-epoch metrics (train loss, val AP / AP50 / AP75) are written to `log/<run_name>.csv`.
-Checkpoints saved to `checkpoints/<run_name>_{best,last}.pth` (best-by-AP50).
+Per-epoch metrics (train loss, val AP / AP50 / AP75, lr, grad norm) are written to `log/<run_name>.csv`.
+Checkpoints saved to `checkpoints/<run_name>_{best,last,epNNN}.pth`.
 
 ### Inference & Submission
 
 ```bash
-python submission.py checkpoints/<run_name>_best.pth --student_id <STUDENT_ID>
+python submission.py checkpoints/<run_name>_ep250.pth --backbone convnext_base \
+    --min_size 800 --max_size 1333 --anchor_sizes "8,16,32,64,128" \
+    --box_detections_per_img 500 --tag <tag>
 ```
 
-Produces `submission/test-results.json` (COCO RLE format, exact filename mandated by slides) and `submission/<STUDENT_ID>_HW3.zip` ready to upload to CodaBench.
+Produces `submission/test-results.json` (COCO RLE format, exact filename mandated by slides) and `submission/<run_name>_<tag>_HW3.zip` ready to upload to CodaBench.
 
-## Performance Snapshot
+## Performance
 
-| Run | Backbone | Val AP50 | CodaBench AP50 |
-| :-- | :------: | :------: | :------------: |
-| baseline | ResNet50-FPN-v2 | TBD | TBD |
+See CodaBench leaderboard screenshot below for final test AP50 score.
 
-Leaderboard screenshot:
-
-`<insert when first submission lands>`
+![Leaderboard](leaderboard.png)
 
 ## Pre-Flight Reading
 
@@ -89,14 +91,19 @@ Before modifying the model:
 3. **`pycocotools.mask`** — RLE encode/decode (note: `counts` must be a `str`, not `bytes`, for submission).
 4. **`pycocotools.COCOeval`** — `iouType="segm"`, AP50 is `stats[1]`.
 
-## Future Experiments
+## Experiments
 
-- Backbone swap (ResNet101, ConvNeXt-tiny).
-- Tiling pipeline for dense small instances.
-- Anchor tuning (`anchor_sizes=((8,),(16,),(32,),(64,),(128,))`) — cells are smaller than COCO default scales.
-- Dice loss for the mask head.
-- 5-fold ensemble for the final submission.
-- H&E-specific stain augmentation.
+Key design decisions and ablations:
+
+- **Backbone**: ConvNeXt-Base over ResNet-50 — 2× params (107.56M vs 46M), better feature quality for small cell instances.
+- **Anchor tuning**: Custom anchors `((8,),(16,),(32,),(64,),(128,))` — cells are much smaller than COCO defaults.
+- **Hyperparameter sweeps**: Grid over LR ∈ {2e-4, 5e-4, 7e-4, 8e-4, 1e-3} and WD ∈ {2e-3, 3e-3, 5e-3}.
+- **Two-stage training**: Val split to find best epoch → retrain on full data. Found that the val-set peak underestimates full-data epochs needed.
+- **K-Fold CV (K=5)**: Stratified 5-fold. Too slow for practical deadline; abandoned in favor of two-stage.
+- **Speed optimizations**: `persistent_workers`, `--workers 16`. (`cudnn.benchmark=True` backfired with Mask R-CNN dynamic shapes.)
+- **OOM handling**: Automatic batch-size halving on `torch.cuda.OutOfMemoryError` with global state guard.
+
+Best single-model result: ConvNeXt-Base, BS=2, LR=2e-4, WD=2e-3, 250 epochs → **0.6110** CodaBench AP50.
 
 ## Author
 
