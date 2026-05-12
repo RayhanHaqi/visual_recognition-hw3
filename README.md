@@ -97,13 +97,15 @@ Key design decisions and ablations:
 
 - **Backbone**: ConvNeXt-Base over ResNet-50 — 2× params (107.56M vs 46M), better feature quality for small cell instances.
 - **Anchor tuning**: Custom anchors `((8,),(16,),(32,),(64,),(128,))` — cells are much smaller than COCO defaults.
-- **Hyperparameter sweeps**: Grid over LR ∈ {2e-4, 5e-4, 7e-4, 8e-4, 1e-3} and WD ∈ {2e-3, 3e-3, 5e-3}.
-- **Two-stage training**: Val split to find best epoch → retrain on full data. Found that the val-set peak underestimates full-data epochs needed.
-- **K-Fold CV (K=5)**: Stratified 5-fold. Too slow for practical deadline; abandoned in favor of two-stage.
+- **Direct training (best)**: `val_frac=0.0` on all 209 images, 250 epochs, periodic checkpoints at save_every=50. **0.6110 CodaBench AP50**.
+- **Two-stage training**: Val split to find best epoch → retrain on full data. Found that the val-set peak underestimates full-data epochs needed:
+  - LR=5e-4 WD=2e-3, val peak ep 71 → full 72 epochs → **0.4948**
+  - LR=7e-4 WD=3e-3, val peak ep 91 → full 92 epochs → **0.4232**
+  - LR=8e-4 WD=5e-3, val peak ep 137 → full 138 epochs → **0.4222**
+- **Hyperparameter sweeps**: LR ∈ {2e-4, 5e-4, 7e-4, 8e-4, 1e-3}, WD ∈ {2e-3, 3e-3, 5e-3}. LR=1e-3 caused model collapse.
+- **K-Fold CV (K=5)**: Stratified 5-fold. 31+ hours impractical; abandoned.
 - **Speed optimizations**: `persistent_workers`, `--workers 16`. (`cudnn.benchmark=True` backfired with Mask R-CNN dynamic shapes.)
 - **OOM handling**: Automatic batch-size halving on `torch.cuda.OutOfMemoryError` with global state guard.
-
-Best single-model result: ConvNeXt-Base, BS=2, LR=2e-4, WD=2e-3, 250 epochs → **0.6110** CodaBench AP50.
 
 ## Author
 
