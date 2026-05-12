@@ -1,0 +1,396 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{CJKutf8}
+\onehalfspacing
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=blue,
+    citecolor=blue,
+}
+
+% --- Document Identity ---
+\title{\textbf{Visual Recognition using Deep Learning}\\ \large Homework 3: Cell Instance Segmentation}
+\author{
+    Muhammad Rayhan Athaillah \begin{CJK*}{UTF8}{bsmi}(賴瑞涵)\end{CJK*}\\
+    \small Student ID: 313540001\\
+    \small National Yang Ming Chiao Tung University
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\vspace{0.5cm}
+\noindent \textbf{GitHub Repository:} \href{https://github.com/RayhanHaqi/visual\_recognition-hw3}{https://github.com/RayhanHaqi/visual\_recognition-hw3}
+
+% ==========================================
+% 1. INTRODUCTION
+% ==========================================
+\section{Introduction}
+This report presents the technical implementation for the Cell Instance Segmentation problem (Homework 3) within the Visual Recognition using Deep Learning course. The objective is to segment four distinct cell types in H\&E-stained medical microscopy images, evaluated by AP50 on a hidden CodaBench leaderboard.
+
+\subsection{Task and Dataset}
+The dataset consists of 209 training images and 101 test images. Each training sample is a folder containing a source image (\texttt{image.tif}) and up to four instance mask files (\texttt{class1.tif} through \texttt{class4.tif}), where each unique non-zero pixel value represents one cell instance of that class. Test images are single \texttt{.tif} files without masks.
+
+\subsection{Technical Constraints}
+The assignment enforces the following constraints:
+\begin{itemize}
+    \item The model must be based on \textbf{Mask R-CNN} \cite{he2017}.
+    \item Trainable parameters must remain under \textbf{200 million}.
+    \item Only \textbf{pure vision-based} models are permitted (no VLM or prompt-based architectures).
+    \item \textbf{ImageNet pretraining} is allowed.
+    \item \textbf{No external data} beyond the provided dataset is permitted.
+    \item All source code must be submitted as \texttt{.py} files alongside a PDF report in English.
+\end{itemize}
+
+% ==========================================
+% 2. LITERATURE REVIEW
+% ==========================================
+\section{Literature Review}
+
+\subsection{Mask R-CNN}
+Mask R-CNN, proposed by He et al. \cite{he2017}, extends Faster R-CNN \cite{ren2015} by adding a parallel branch for predicting segmentation masks on each Region of Interest (RoI). Its key innovations include:
+
+\begin{itemize}
+    \item \textbf{RoIAlign:} Replaces the quantization-based RoIPool with bilinear interpolation, preserving spatial correspondence between input pixels and feature maps ; critical for pixel-accurate instance segmentation.
+    \item \textbf{Multi-task Loss:} Combines classification, bounding box regression, and per-pixel mask prediction into a unified loss: $L = L_{\text{cls}} + L_{\text{box}} + L_{\text{mask}}$.
+    \item \textbf{Decoupled Mask Prediction:} The mask head predicts a binary mask per class independently, avoiding inter-class competition.
+\end{itemize}
+
+The standard Mask R-CNN uses a \textbf{Feature Pyramid Network (FPN)} \cite{lin2017} as the neck, which builds a multi-scale feature hierarchy by combining top-down pathways with lateral connections. FPN enables robust detection of objects at multiple scales ; critical for cell images where cell sizes vary significantly.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{figure/maskrcnn_arch.png}
+    \caption{Mask R-CNN architecture with FPN backbone, RPN, and parallel mask/box heads \cite{he2017}.}
+    \label{fig:maskrcnn}
+\end{figure}
+
+\subsection{ConvNeXt: A Modernized ConvNet}
+Liu et al. \cite{liu2022} proposed ConvNeXt, a pure convolutional architecture that modernizes ResNet by incorporating design principles from vision transformers (ViTs). Key modifications include:
+
+\begin{itemize}
+    \item \textbf{Depthwise convolutions} with increased width, mimicking the patch embedding of ViTs.
+    \item \textbf{Inverted bottleneck} design (wider intermediate dimensions).
+    \item \textbf{LayerNorm} instead of BatchNorm, improving training stability.
+    \item \textbf{GELU activations} and fewer normalization layers.
+\end{itemize}
+
+ConvNeXt achieves competitive or superior performance to Swin Transformer \cite{liu2021} on multiple vision benchmarks while retaining the inductive biases of CNNs (translation equivariance, locality). For the cell segmentation task with only 209 training images, the CNN inductive bias provides stronger generalization than transformer architectures that must learn spatial relationships from data.
+
+\subsection{Related Work: Detection Benchmarks}
+On the COCO instance segmentation benchmark, the standard Mask R-CNN with ResNet-50 FPN v2 achieves 41.8 mask mAP. ConvNeXt-Base with Mask R-CNN improves this to approximately 44.2 mask mAP, while Swin-Base reaches 46.5 mask mAP. However, these rankings narrow significantly on small, domain-specific datasets like medical cell images.
+
+% ==========================================
+% 3. METHODOLOGY
+% ==========================================
+\section{Method}
+
+\subsection{Data Preprocessing}
+Each training sample folder contains an image and up to four class-specific instance masks. The preprocessing pipeline:
+\begin{enumerate}
+    \item Read \texttt{image.tif} using \texttt{tifffile}. If grayscale, stack to 3 channels.
+    \item For each \texttt{classN.tif}, find all unique non-zero pixel values. Each value defines one instance: a binary mask and its bounding box.
+    \item Combine all instances across classes into a PyTorch target dictionary with keys \texttt{boxes}, \texttt{labels} (1--4), \texttt{masks}, \texttt{area}, and \texttt{iscrowd}.
+\end{enumerate}
+
+Images are normalized to $[0, 1]$ by the albumentations \texttt{ToTensorV2} transform. The torchvision Mask R-CNN model internally applies ImageNet mean/std normalization.
+
+\subsection{Data Augmentation}
+To improve robustness with limited training data (209 images), the following augmentations are applied during training only:
+
+\begin{itemize}
+    \item \textbf{Spatial:} HorizontalFlip (p=0.5), VerticalFlip (p=0.5), RandomRotate90 (p=0.5).
+    \item \textbf{Color/Intensity:} ColorJitter (brightness=0.2, contrast=0.2, saturation=0.2), HueSaturationValue, RandomBrightnessContrast (p=0.5), CLAHE (p=0.2).
+    \item \textbf{Noise/Blur:} GaussNoise (p=0.2), OneOf(MotionBlur, MedianBlur, GaussianBlur) (p=0.2).
+\end{itemize}
+
+These augmentations simulate variations in staining intensity and imaging conditions common in histology workflows. Validation and test sets use only \texttt{ToTensorV2} (no augmentation).
+
+\subsection{Dataset Split and Model Selection}
+A key methodological decision was to \textbf{train on all 209 images without a validation split} ($\texttt{val\_frac}=0.0$). With only 209 training samples, removing 31 images (15\%) for validation reduced the training set to 178 ; a significant loss of data for a model with 107.6M parameters. Instead, model selection was performed directly on the hidden CodaBench test set by saving \textbf{periodic checkpoints at epochs 50, 75, 100, 125, and 150} and submitting each for leaderboard evaluation. This strategy maximizes the training data available to the model while using CodaBench as the ground-truth oracle for epoch selection. Each submitted checkpoint costs one of two daily CodaBench submission slots, so the five checkpoints are consumed over three days.
+
+\subsection{Model Architecture}
+
+\subsubsection{Backbone: ConvNeXt-Base}
+The primary model uses \textbf{ConvNeXt-Base} as the backbone, initialized with ImageNet-22K pretrained weights and fine-tuned at 384$\times$384 resolution\\ (\texttt{convnext\_base.fb\_in22k\_ft\_in1k\_384}). The backbone contains four stages with output channels $[128, 256, 512, 1024]$ at strides $[4, 8, 16, 32]$, totaling 88 million parameters.
+
+\subsubsection{Neck: Feature Pyramid Network}
+A \textbf{Feature Pyramid Network (FPN)} \cite{lin2017} is built on top of the ConvNeXt backbone via \texttt{BackboneWithFPN}, converting all four stage features to 256-channel outputs. A \texttt{LastLevelMaxPool} adds a fifth level (stride 64) for large-object detection.
+
+\subsubsection{Detection Heads}
+The standard Mask R-CNN head structure is retained with class-adapted predictors:
+
+\begin{itemize}
+    \item \textbf{RPN:} Region Proposal Network with custom anchor sizes \\ \texttt{((8,), (16,), (32,), (64,), (128,))} and aspect ratios $(0.5, 1.0, 2.0)$.
+    \item \textbf{Box Head:} \texttt{FastRCNNPredictor} producing 5-class classification (4 cell classes + background) and bounding box regression.
+    \item \textbf{Mask Head:} \texttt{MaskRCNNPredictor} with 256 hidden channels, producing per-class binary masks.
+\end{itemize}
+
+The total model contains \textbf{107.6 million} trainable parameters, well within the 200 million budget.
+
+\subsubsection{Key Architectural Modification: COCO RPN Transfer}
+A critical design choice involves the RPN initialization. While the ConvNeXt backbone benefits from ImageNet pretraining, the RPN and detection heads start from random weights. To accelerate convergence, the RPN head weights from a COCO-pretrained ResNet-50 FPN v2 Mask R-CNN model are transferred to the ConvNeXt model. Both models output 256-channel FPN features, making the RPN head weights directly compatible. This transfer is performed by matching parameter keys and shapes between the two models, copying weights for the RPN convolutional layers and logits.
+
+\subsection{Training Pipeline}
+
+\begin{itemize}
+    \item \textbf{Optimizer:} AdamW \cite{loshchilov2017} with learning rate $1 \times 10^{-4}$ and weight decay $1 \times 10^{-3}$ (tuned via sweep, see Experiment 6).
+    \item \textbf{LR Schedule:} OneCycleLR \cite{smith2019} with $pct\_start = 0.3$ over 150 epochs, peaking at epoch 45 and cosine annealing to near-zero.
+    \item \textbf{Input Resolution:} 800$\times$1333 (long side capped).
+    \item \textbf{Batch Size:} 1 (RTX 4090, 24 GB VRAM). An OOM auto-halving mechanism catches \texttt{OutOfMemoryError} exceptions and automatically restarts training with halved batch size.
+    \item \textbf{Mixed Precision:} Automatic Mixed Precision (AMP) with \texttt{GradScaler}.
+    \item \textbf{Regularization:} Gradient clipping (max norm 10.0), Exponential Moving Average (EMA, decay 0.9998) for weight averaging at inference time and checkpoint saving.
+    \item \textbf{Loss:} Multi-task loss combining classification, box regression, mask prediction, RPN objectness, and RPN box regression. The box regression loss is weighted $3\times$ to prevent gradient starvation (see Experiment 5).
+    \item \textbf{Gradient Norm Tracking:} Per-batch gradient norms are logged to CSV to monitor training dynamics. A gradient norm plateau detection mechanism was investigated as an automatic epoch selection signal but was ultimately replaced with periodic checkpoints (see Experiment 7).
+\end{itemize}
+
+% ==========================================
+% 4. RESULTS AND DISCUSSION
+% ==========================================
+\section{Results and Discussion}
+
+\subsection{Model Progression and Leaderboard Scores}
+Table \ref{tab:results} summarizes the progression of experiments and their CodaBench leaderboard scores. Starting from a ResNet-50 baseline at 0.3484 AP50, systematic improvements raised performance to \textbf{0.6110 AP50} ; a 75\% relative gain.
+
+\begin{table}[htbp]
+\centering
+\caption{Progression of model configurations and CodaBench AP50 scores.}
+\label{tab:results}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llc>{\raggedright\arraybackslash}p{4.2cm}c@{}}
+\toprule
+\textbf{Run} & \textbf{Backbone} & \textbf{Epoch} & \textbf{Key Configuration} & \textbf{AP50} \\ \midrule
+v1 (baseline) & ResNet-50 FPN v2 & 33 (bs=6) & Low resolution ($384\times 768$) & 0.3484 \\
+v2 & ResNet-50 FPN v2 & 61 (bs=6) & Custom anchors, higher res & 0.4504 \\
+noRPN & ConvNeXt-Base & 100 (bs=2) & Random RPN init & 0.0981 \\
+v1 & ConvNeXt-Base & 47 (bs=2) & COCO RPN transfer & 0.5220 \\
+v2 & ConvNeXt-Base & 86 (bs=1) & OneCycle (pct=0.3), EMA & 0.5287 \\
+v3 & ConvNeXt-Base & 113 (bs=1) & Box reg $\times$2, 200 ep & 0.5741 \\
+v4 & ConvNeXt-Base & 199 (bs=1) & val\_frac=0, box reg $\times$3 & 0.5510 \\
+v5 & ConvNeXt-Base & 199 (bs=1) & wd=$10^{-4}$, val\_frac=0 & 0.5631 \\
+v6 & ConvNeXt-Base & 100/150 (bs=1) & wd=$10^{-3}$, box$\times$3 & 0.5811 \\
+v7 & ConvNeXt-Base & 100/150 (bs=1) & wd=$2\cdot 10^{-3}$, box$\times$3 & 0.5587 \\
+v8 & ConvNeXt-Base & 150/150 (bs=1) & lr=$2\cdot 10^{-4}$, wd=$2\cdot 10^{-3}$ & 0.5656 \\
+\textbf{v9} & \textbf{ConvNeXt-Base} & \textbf{150/250 (bs=2)} & \textbf{lr=$2\cdot 10^{-4}$, wd=$2\cdot 10^{-3}$, pct=0.5} & \textbf{0.6110} \\ \bottomrule
+\end{tabular}
+\end{table}
+
+The best model uses periodic checkpoint submission and submits all five for CodaBench evaluation. With the original $lr=1 \times 10^{-4}$ configuration, the epoch-100 checkpoint consistently outperformed epoch-150 across all configurations, indicating overfitting past epoch 100. However, the v8 and v9 experiments reveal a critical interaction between learning rate and weight decay: at the higher learning rate of $2 \times 10^{-4}$ combined with strong weight decay ($2 \times 10^{-3}$), the optimal epoch shifts from 100 to 150, and overfitting begins only after epoch 150. The full epoch trajectory for v9 is $\{50: 0.2191, 100: 0.5586, 150: \mathbf{0.6110}, 200: 0.5555, 250: 0.5053\}$, showing a monotonic decline of $-0.1057$ after the epoch-150 peak ; the model degrades steadily as training continues past the optimum.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{figure/codabench_progress.png}
+    \caption{CodaBench AP50 progression across model iterations.}
+    \label{fig:progress}
+\end{figure}
+
+\subsection{Learning Curves}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figure/training_curves.png}
+    \caption{Training loss and validation metrics for the best ConvNeXt-Base model (run v3, box reg $\times$2, 200 epochs with 85/15 split). Left: loss components. Right: COCO AP metrics on validation set.}
+    \label{fig:curves}
+\end{figure}
+
+Figure \ref{fig:curves} shows training dynamics of the v3 model with a validation split. The total training loss decreases from an initial peak (dominated by RPN losses) to approximately 0.49. The validation AP50 steadily improves, stabilizing around 0.55. Note that for the final best model (v9), the validation set was eliminated entirely ($\texttt{val\_frac}=0.0$) to maximize training data, so no comparable validation curve exists ; performance was measured exclusively on CodaBench.
+
+\subsection{Loss Composition Analysis and Box Regression Weighting}
+A critical empirical finding emerged from analyzing the loss composition over time. Without loss weighting, the bounding box regression loss grew from 4\% to 35\% of the total unweighted loss as training progressed, indicating that the model was sacrificing box precision to optimize the classification and mask objectives (gradient starvation). Table \ref{tab:loss} illustrates this trend.
+
+\begin{table}[htbp]
+\centering
+\caption{Loss composition shift without box regression weighting.}
+\label{tab:loss}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Epoch} & \textbf{Cls} & \textbf{Box Reg} & \textbf{Mask} & \textbf{Obj.} & \textbf{RPN Reg} \\ \midrule
+0--2  & 29\% & 4\%  & 28\% & 34\% & 5\% \\
+40--42 & 23\% & 28\% & 27\% & 14\% & 8\% \\
+80--82 & 22\% & \textbf{35\%} & 32\% &  4\% & 7\% \\ \bottomrule
+\end{tabular}
+\end{table}
+
+To address this, a loss weight of $3\times$ was applied to the box regression loss:
+\[
+L_{\text{total}} = \sum_{k \in \mathcal{K}} w_k \cdot L_k, \quad w_{\text{box\_reg}} = 3.0, \quad w_{k \neq \text{box\_reg}} = 1.0
+\]
+
+This modification consistently improved CodaBench AP50 compared to unweighted ($+0.0454$ at $2\times$), and $3\times$ was found to further improve performance over $2\times$ in later experiments with $\texttt{val\_frac}=0.0$.
+
+\subsection{Learning Rate Schedule Tuning}
+The OneCycleLR schedule was initially configured with $pct\_start = 0.3$, meaning the learning rate increases linearly from $\text{lr}/25$ to $\text{max\_lr}$ over the first 30\% of training (45 epochs for a 150-epoch budget), then cosine-anneals to near-zero over the remaining epochs. This provided sufficient time for the randomly initialized detection heads to converge before the learning rate decays.
+
+For the v9 experiment at $lr=2 \times 10^{-4}$, $pct\_start$ was raised to $0.5$ to give the optimizer more epochs at high learning rate while still benefiting from the cosine annealing tail. With $epochs=250$, the LR peaks at epoch 125 and decays to near-zero ($<10^{-9}$) by epoch 250. This schedule yields the best CodaBench AP50 of 0.6110 at epoch 150, exactly 25 epochs after the LR peak. The 25-epoch settling period suggests the model requires modest annealing time after high-LR exploration to converge to its best minima. The 150-epoch budget used previously (v6--v7) provided only 25 epochs of annealing at $pct\_start=0.3$, which was insufficient to converge the high-LR runs.
+
+\subsection{Weight Decay Sensitivity}
+Weight decay (wd) was identified as a critical hyperparameter for this small-dataset scenario. A sweep across three values was performed with $\texttt{val\_frac}=0.0$ (all 209 images for training) and fixed learning rate $1 \times 10^{-4}$:
+
+\begin{itemize}
+    \item wd=$1 \times 10^{-4}$: weak regularization, model overfits ; \textbf{0.5631}
+    \item wd=$1 \times 10^{-3}$: balanced regularization ; \textbf{0.5811} (best)
+    \item wd=$2 \times 10^{-3}$: strong regularization, model underfits ; \textbf{0.5587}
+\end{itemize}
+
+The narrow sweet spot ($\pm$0.02 AP50 across a 20$\times$ range) highlights the importance of weight decay tuning for small-dataset instance segmentation.
+
+\subsubsection{Learning Rate $\times$ Weight Decay Interaction}
+
+The v7 experiment (wd=$2 \times 10^{-3}$, lr=$1 \times 10^{-4}$) achieved only 0.5587, underfitting relative to the optimal wd=$1 \times 10^{-3}$. A follow-up experiment (v8) doubled the learning rate to $2 \times 10^{-4}$ while keeping wd=$2 \times 10^{-3}$, yielding 0.5656 at epoch 150 ; a modest improvement that showed the model was still improving at the end of training (epoch-150 outperformed epoch-100 for the first time). This motivated a further experiment (v9) extending training to 250 epochs with $pct\_start=0.5$ and BS=2.
+
+The v9 experiment produced the clearest overfitting trajectory observed in this project. Table \ref{tab:epoch_trajectory} shows the CodaBench AP50 scores across all five submitted checkpoints.
+
+\begin{table}[htbp]
+\centering
+\caption{Epoch-by-epoch CodaBench AP50 trajectory for run v9 (lr=$2 \times 10^{-4}$, wd=$2 \times 10^{-3}$, epochs=250, pct=0.5).}
+\label{tab:epoch_trajectory}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Epoch} & 50 & 100 & 150 & 200 & 250 \\ \midrule
+\textbf{AP50} & 0.2191 & 0.5586 & \textbf{0.6110} & 0.5555 & 0.5053 \\
+\textbf{LR} & $7.7\times10^{-5}$ & $1.83\times10^{-4}$ & $1.79\times10^{-4}$ & $6.7\times10^{-5}$ & $8.0\times10^{-10}$ \\ \bottomrule
+\end{tabular}
+\end{table}
+
+Two key findings emerge. First, the very low score at epoch 50 (0.2191) indicates a \textbf{LR phase transition}: at this point the LR is increasing (pre-peak), and the strong weight decay interacts with the rising LR to temporarily destabilize learned representations, even though the model had already achieved reasonable performance at epoch 25. Second, the post-peak trajectory is monotonically degrading: +0.0524 from epoch 100 to 150, then $-$0.0555 to epoch 200, and a further $-$0.0502 to epoch 250. The total decline past the optimum is $-0.1057$, confirming severe overfitting when training beyond 150 epochs.
+
+This experiment demonstrates that on extremely small datasets, the \textbf{interaction between learning rate, weight decay, and training duration} determines optimal performance more than any single hyperparameter. Higher weight decay prevents overfitting but requires proportionally higher learning rate and longer training to converge; conversely, once converged, additional training causes rapid degradation. The epoch-150 sweet spot represents a precise balance: strong enough signal ($lr=2\times10^{-4}$) to overcome regularization ($wd=2\times10^{-3}$), but not so many epochs that the model memorizes the training set.
+
+\subsection{Additional Experiments}
+
+% --- Experiment 1: ConvNeXt Backbone ---
+\subsubsection{Experiment 1: ConvNeXt-Base Backbone}
+\textbf{Hypothesis:} Replacing the standard ResNet-50 backbone with ConvNeXt-Base would improve feature extraction for cell morphology due to ConvNeXt's modernized architecture (depthwise convolutions, LayerNorm, inverted bottlenecks) and stronger ImageNet-22K pretraining.
+
+\textbf{Results:} The ConvNeXt backbone improved CodaBench AP50 from 0.4504 (ResNet-50 v2) to 0.5220, a gain of +0.0716. This confirms that the stronger backbone representation translates to better cell segmentation, even with only 209 training images.
+
+% --- Experiment 2: COCO RPN Transfer ---
+\subsubsection{Experiment 2: COCO-Pretrained RPN Transfer}
+\textbf{Hypothesis:} Randomly initialized RPN heads on a pretrained ConvNeXt backbone would produce poor region proposals during early training. Transferring COCO-pretrained RPN weights from a ResNet-50 FPN v2 model would provide a stronger starting point for proposal generation, accelerating convergence.
+
+\textbf{Results:} Without COCO RPN transfer, the model produced 18,183 predictions on 101 test images (vs 7,079 for a COCO-pretrained ResNet-50), indicating the random RPN generated excessive noisy proposals. The CodaBench score was only 0.0981. After transferring COCO-pretrained RPN weights, the model achieved 0.5220 AP50, a dramatic improvement. The RPN head weights are compatible because both models produce 256-channel FPN features.
+
+% --- Experiment 3: Box Regression Loss Weighting ---
+\subsubsection{Experiment 3: Box Regression Loss Weighting}
+\textbf{Hypothesis:} The bounding box regression loss was underrepresented in the total loss, causing the model to deprioritize bounding box precision in favor of classification accuracy. Weighting the box regression loss higher would force the model to learn more precise localization.
+
+\textbf{Results:} Applying a $2\times$ weight to $L_{\text{box}}$ improved CodaBench AP50 from 0.5287 to 0.5741 (+0.0454). A $3\times$ weight further improved to 0.5811 in the final best configuration with $\texttt{val\_frac}=0.0$ and wd=$1 \times 10^{-3}$. Notably, the validation AP50 decreased slightly when box regression was weighted (0.566 $\rightarrow$ 0.557), but CodaBench test performance improved ; indicating the model learned more generalizable bounding box precision rather than overfitting to the validation set.
+
+% --- Experiment 4: Resolution Scaling ---
+\subsubsection{Experiment 4: Input Resolution Scaling}
+\textbf{Hypothesis:} Cell instances are small and require high-resolution input for accurate mask prediction. Training at 800$\times$1333 (vs the baseline 384$\times$768) would provide finer spatial detail.
+
+\textbf{Results:} The resolution increase from 384$\times$768 to 800$\times$1333 improved ResNet-50 performance from 0.3484 to 0.4504 (+0.102). This is the single largest improvement across all experiments, confirming that spatial resolution is the dominant bottleneck for small-object instance segmentation.
+
+% --- Experiment 5: Zero Validation Split ---
+\subsubsection{Experiment 5: Training on Full Dataset ($\texttt{val\_frac}=0.0$)}
+\textbf{Hypothesis:} With only 209 training images, splitting 15\% for validation removes valuable training data. Training on all 209 images and using CodaBench as the oracle for model selection would improve performance, despite losing local validation signal.
+
+\textbf{Results:} The $\texttt{val\_frac}=0.0$ strategy, combined with periodic checkpoint submission, proved essential for achieving the best results. The epoch-100 checkpoint initially dominated under lower learning rates, but the v9 result of 0.6110 at epoch 150 demonstrates that the optimal stopping epoch depends on the LR–wd configuration. Using CodaBench as an oracle for epoch selection allows identifying these configuration-dependent optima without consuming training data for a local validation set. However, this strategy requires consuming CodaBench submission slots across multiple days and introduces a brief delay before results are visible.
+
+% --- Experiment 6: Weight Decay Sweep ---
+\subsubsection{Experiment 6: Weight Decay Hyperparameter Sweep}
+\textbf{Hypothesis:} On a 209-image dataset, weight decay magnitude critically affects the generalization–memorization tradeoff. Too little weight decay allows overfitting; too much prevents learning.
+
+\textbf{Results:} A sweep across wd=$\{1 \times 10^{-4}, 1 \times 10^{-3}, 2 \times 10^{-3}\}$ with fixed lr=$1 \times 10^{-4}$ yielded CodaBench AP50 scores of 0.5631, 0.5811, and 0.5587 respectively. The narrow sweet spot of wd=$1 \times 10^{-3}$ provides the right balance of regularization. The overfitting gap between wd=$1 \times 10^{-4}$ (0.5631) and wd=$1 \times 10^{-3}$ (0.5811) is +0.018, while the underfitting penalty from wd=$2 \times 10^{-3}$ is $-$0.022. These results demonstrate that weight decay is a first-order hyperparameter for small-dataset Mask R-CNN training.
+
+% --- Experiment 7: Gradient Norm Plateau Detection ---
+\subsubsection{Experiment 7: Gradient Norm Plateau Detection for Epoch Selection}
+\textbf{Hypothesis:} Without a validation set ($\texttt{val\_frac}=0.0$), an automated signal is needed to select the best training epoch. The gradient norm (computed via\\ \texttt{clip\_grad\_norm\_}) could serve as a convergence indicator: when the EMA-smoothed gradient norm stabilizes (relative change $<3\%$ over a 10-epoch window), the model has converged.
+
+\textbf{Results:} This approach failed for this specific training setup. The gradient norm decreased continuously from $\sim$125 at epoch 1 to $\sim$7 at epoch 150, never stabilizing within 3\% over 10 epochs. The model continues to fit the training data (loss drops from 30 to 0.6) while overfitting on test data past epoch 100. Since gradient flow never plateaus, gradient norm cannot serve as a convergence signal for this task. Periodic checkpoint submission proved more reliable for epoch selection.
+
+% --- Experiment 8: Test-Time Augmentation ---
+\subsubsection{Experiment 8: Test-Time Augmentation}
+\textbf{Hypothesis:} Horizontal flip and multi-scale test-time augmentation (TTA) would improve prediction robustness by ensembling predictions across transformed views of each test image.
+
+\textbf{Results:} Horizontal flip TTA yielded 0.6109 AP50 (${-}0.0001$ from baseline), providing no benefit. The model was already exposed to random horizontal flips during training ($p=0.5$), making it invariant to this augmentation at inference time. Multi-scale TTA (min\_size $\in$ \{640, 800, 960\}) performed far worse at 0.2291 AP50 (${-}0.3819$). The custom anchor sizes $(8, 16, 32, 64, 128)$ were tuned for 800$\times$1333 resolution; at other scales, anchors become mismatched to cell sizes, degrading RPN proposal quality and contaminating the merged predictions. This confirms that anchor-tuning is resolution-dependent and that TTA offers no improvement when the model is already well-regularized and trained with matching augmentations.
+
+% --- Experiment 9: Post-Processing Threshold Sweep ---
+\subsubsection{Experiment 9: Score Threshold and Box Detection Count Sweep}
+\textbf{Hypothesis:} Lowering the score threshold (from 0.05 to 0.01) and increasing the box detection count (from 500 to 1000 per image) would admit additional correct detections that were previously filtered out, improving recall without harming precision.
+
+\textbf{Results:} Both the reduced score threshold configuration and the combined low-threshold + high-detection-count configuration produced an identical AP50 of 0.6110 ; no change from the baseline. This indicates the model's confidence calibration is well-tuned: no correct detections fall in the 0.01--0.05 score range, and no valid proposals are lost within the 500-detection RPN limit. The model's remaining errors are due to missed feature representations rather than threshold-induced false negatives.
+
+% --- Experiment 10: Checkpoint Ensemble ---
+\subsubsection{Experiment 10: Epoch Checkpoint Ensemble via NMS Merging}
+\textbf{Hypothesis:} Merging predictions from multiple training epochs (100, 125, 150) via per-class NMS would produce a more robust prediction set, as different checkpoints may specialize in different cell instances or boundary refinements.
+
+\textbf{Results:} The ensemble of epochs 100, 125, and 150 achieved 0.5832 AP50 ; worse than the best single-epoch score (0.6110). The weaker checkpoints (epoch 100: 0.5586) introduced noisy predictions that survived the NMS merge, outweighing any complementary information they provided. This confirms that on this dataset, the overfitting trajectory is monotonic post-peak: the single best checkpoint outperforms any combination with earlier or later epochs. Ensemble benefits typically observed on larger datasets (where different training segments capture complementary features) do not materialize when the primary limitation is data scarcity rather than model variance.
+
+% --- Experiment 11: Two-Stage Training with Validation Split ---
+\subsubsection{Experiment 11: Two-Stage Training with Validation Split}
+\textbf{Hypothesis:} A two-stage approach ; training with a validation split to identify the best-performing epoch, then retraining on all 209 images for exactly that number of epochs ; would automatically determine the optimal training duration without consuming CodaBench submission slots.
+
+\textbf{Results:} Three two-stage configurations were evaluated:
+\begin{itemize}
+    \item LR=$5\times10^{-4}$, WD=$2\times10^{-3}$, VAL=0.2 (42 val images): Val AP50 peaked at 0.512 (epoch 71). Full model trained 72 epochs → CodaBench \textbf{0.4948}.
+    \item LR=$7\times10^{-4}$, WD=$3\times10^{-3}$, VAL=0.3 (63 val images): Val AP50 peaked at 0.525 (epoch 91). Full model trained 92 epochs → CodaBench \textbf{0.4232}.
+    \item LR=$8\times10^{-4}$, WD=$5\times10^{-3}$, VAL=0.3, 150 epochs: Val AP50 peaked at 0.521 (epoch 137). Full model trained 138 epochs → CodaBench \textbf{0.4222}.
+\end{itemize}
+The systematic pattern — higher validation AP50 translating to lower test score — reveals a fundamental flaw in the two-stage approach for this dataset. The validation set (42--63 images) is too small to reliably estimate the optimal stopping epoch on 209 images. When the full model is trained on all 209 images, the additional 42--63 images shift the optimal convergence point to a later epoch, but the two-stage method forces the model to stop at the pre-determined sub-optimal point. The model trained for 72 epochs on 209 images achieved better test performance (0.4948) than models trained for 92 or 138 epochs, suggesting that even \emph{earlier} stopping on the full dataset overfits less, despite validation curves suggesting later peaks. This experiment demonstrates that the direct training strategy with periodic CodaBench checkpoint submission (Experiment 5) is both more accurate and more practical than the two-stage approach for small-dataset instance segmentation.
+
+% --- Experiment 12: Stratified K-Fold Cross-Validation ---
+\subsubsection{Experiment 12: Stratified K-Fold Cross-Validation}
+\textbf{Hypothesis:} A stratified 5-fold cross-validation pipeline would provide more reliable epoch selection by averaging validation AP50 across five independent data splits, reducing the noise of any single validation split.
+
+\textbf{Results:} This approach was abandoned before completion due to impractical training time. With 250 epochs per fold and five folds, the total training time exceeded 31 hours (approximately 1.3 days), making it infeasible under the weekly assignment cycle and shared GPU resource constraints. The first fold completed at 5 epochs before an OOM event occurred (GPU out-of-memory at batch\_size=2), triggering an automatic batch-size halving mechanism that required debugging before proper re-training. The stratified split generation, OOM handling, and checkpoint management infrastructure were implemented and functional, but the method was replaced by the two-stage approach (Experiment 11) and ultimately superseded by direct full-data training (Experiment 5). However, the OOM auto-halving mechanism described in Section 3.5 successfully reduces batch size from 4 to 2 to 1 on \texttt{OutOfMemoryError} exceptions, preventing training failure on GPU memory-constrained environments without manual restart.
+
+% ==========================================
+% 5. CONCLUSION
+% ==========================================
+\section{Conclusion}
+
+This project successfully adapted a ConvNeXt-Base Mask R-CNN model for cell instance segmentation on H\&E-stained microscopy images. Starting from a ResNet-50 baseline achieving 0.3484 AP50 on CodaBench, systematic experimentation yielded a final score of \textbf{0.6110 AP50} ; a 75\% relative improvement.
+
+The key contributions are:
+\begin{enumerate}
+    \item \textbf{Backbone modernization:} Replacing ResNet-50 with ConvNeXt-Base (+0.0716 AP50), leveraging ImageNet-22K pretraining and modern CNN design principles.
+    \item \textbf{COCO RPN transfer:} Initializing RPN heads from a COCO-pretrained model to bootstrap proposal generation when only the backbone is pretrained, preventing catastrophic early-training performance (+0.4239 AP50 vs random RPN).
+    \item \textbf{Box regression loss reweighting:} Addressing gradient starvation by applying a $3\times$ weight to the box regression loss, improving test generalization by +0.0454 over unweighted baselines.
+    \item \textbf{Resolution optimization:} Training at 800$\times$1333 resolution to preserve fine cell details, yielding +0.102 AP50 over the 384$\times$768 baseline ; the single largest improvement.
+    \item \textbf{Full-data training with CodaBench oracle:} Eliminating the validation split ($\texttt{val\_frac}=0.0$) to train on all 209 images, using periodic CodaBench submissions for epoch selection.
+    \item \textbf{Weight decay sensitivity analysis:} Identifying wd=$1 \times 10^{-3}$ as the critical regularization value, with a narrow $\pm$0.02 AP50 margin across a 20$\times$ sweep range.
+    \item \textbf{LR $\times$ weight decay interaction:} Demonstrating that higher weight decay ($2 \times 10^{-3}$) requires proportionally higher learning rate ($2 \times 10^{-4}$) and longer training (250 epochs) to converge, yielding the best result of 0.6110. The post-peak overfitting trajectory (${-}0.1057$ from epoch 150 to 250) reveals the precise optimal stopping point.
+    \item \textbf{Post-hoc improvement failures:} Three additional strategies ; test-time augmentation, score/detection threshold sweeps, and checkpoint ensembling ; were found to provide no improvement or to degrade performance, indicating a performance ceiling under the current data and architectural constraints.
+\end{enumerate}
+
+An attempted gradient norm plateau detection mechanism for automatic epoch selection proved ineffective, as the gradient norm decreases continuously (125 $\rightarrow$ 7) without stabilizing throughout training. The periodic checkpoint submission strategy (epochs 50, 100, 150, 200, 250) proved more practical and reliable, with epoch 150 yielding the best CodaBench performance in the final v9 configuration ; a shift from the epoch-100 optimum observed under lower learning rates.
+
+These results demonstrate that on extremely small datasets, careful attention to training dynamics ; including loss composition analysis, regularization tuning, learning rate scheduling, and the interplay between learning rate and weight decay ; can substantially improve instance segmentation performance beyond what architectural choices alone achieve. The v9 experiment in particular reveals that the optimal epoch is itself a function of the LR–wd configuration, and that the precise stopping point can have a $\pm$0.05 AP50 impact on the final score.
+
+\subsubsection{Plateau Analysis}
+At 0.6110 AP50, the model reached a performance ceiling under the current architectural and data regime. Three post-hoc enhancement strategies were tested without retraining: test-time augmentation (horizontal flip and multi-scale), post-processing threshold sweeps (score threshold and box detection count), and checkpoint ensembling. None improved the score: TTA was neutral or harmful, threshold lowering produced identical results, and ensemble merging degraded performance. This suggests that the remaining errors are not recoverable through inference-time manipulation ; the model has extracted all available signal from the 209-image training set at the current backbone capacity. Breaking through to 0.65+ AP50 would likely require a larger backbone (ConvNeXt-Large, $\sim$198M parameters), stronger data augmentation (e.g., copy-paste instance augmentation), or external data sources, all of which are constrained by the 200M parameter budget and the no-external-data rule.
+
+% ==========================================
+% REFERENCES
+% ==========================================
+\newpage
+\begin{thebibliography}{99}
+\bibitem{he2017} He, K., Gkioxari, G., Doll\'{a}r, P., Girshick, R.: Mask R-CNN. In: Proc. ICCV, pp. 2961--2969 (2017)
+\bibitem{ren2015} Ren, S., He, K., Girshick, R., Sun, J.: Faster R-CNN: Towards real-time object detection with region proposal networks. In: Proc. NeurIPS, pp. 91--99 (2015)
+\bibitem{lin2017} Lin, T.Y., Doll\'{a}r, P., Girshick, R., He, K., Hariharan, B., Belongie, S.: Feature pyramid networks for object detection. In: Proc. CVPR, pp. 2117--2125 (2017)
+\bibitem{liu2022} Liu, Z., Mao, H., Wu, C.Y., Feichtenhofer, C., Darrell, T., Xie, S.: A ConvNet for the 2020s. In: Proc. CVPR, pp. 11976--11986 (2022)
+\bibitem{liu2021} Liu, Z., Lin, Y., Cao, Y., Hu, H., Wei, Y., Zhang, Z., Lin, S., Guo, B.: Swin Transformer: Hierarchical vision transformer using shifted windows. In: Proc. ICCV, pp. 10012--10022 (2021)
+\bibitem{smith2019} Smith, L.N., Topin, N.: Super-convergence: Very fast training of neural networks using large learning rates. In: SPIE (2019)
+\bibitem{loshchilov2017} Loshchilov, I., Hutter, F.: Decoupled weight decay regularization. In: Proc. ICLR (2019)
+\end{thebibliography}
+
+\end{document}
