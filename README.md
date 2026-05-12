@@ -78,7 +78,7 @@ Produces `submission/test-results.json` (COCO RLE format, exact filename mandate
 
 ## Performance
 
-See CodaBench leaderboard screenshot below for final test AP50 score.
+**10th place** on CodaBench leaderboard (May 12, 2026) with **0.6110** AP50.
 
 ![Leaderboard](leaderboard.png)
 

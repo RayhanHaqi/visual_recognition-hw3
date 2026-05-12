@@ -317,7 +317,9 @@ This experiment demonstrates that on extremely small datasets, the \textbf{inter
 % --- Experiment 7: Gradient Norm Plateau Detection ---
 \subsubsection{Experiment 7: Gradient Norm Plateau Detection for Epoch Selection}
 \textbf{Hypothesis:} Without a validation set ($\texttt{val\_frac}=0.0$), an automated signal is needed to select the best training epoch.
-The gradient norm (computed via \texttt{clip\_grad\_norm\_}) could serve as a convergence indicator: when the EMA-smoothed gradient norm stabilizes (relative change $<3\%$ over a 10-epoch window), the model has converged.
+The gradient norm (\texttt{clip\_grad\_norm\_}) could serve as a convergence indicator:
+when the EMA-smoothed gradient norm stabilizes (relative change $<3\%$ over a 10-epoch window),
+the model has converged.
 
 \textbf{Results:} This approach failed for this specific training setup. The gradient norm decreased continuously from $\sim$125 at epoch 1 to $\sim$7 at epoch 150, never stabilizing within 3\% over 10 epochs. The model continues to fit the training data (loss drops from 30 to 0.6) while overfitting on test data past epoch 100. Since gradient flow never plateaus, gradient norm cannot serve as a convergence signal for this task. Periodic checkpoint submission proved more reliable for epoch selection.
 
