@@ -6,6 +6,8 @@
 
 This repository contains the implementation for the Cell Instance Segmentation task (Homework 3): segmenting four classes of cells in H&E-stained medical images, evaluated by **AP50** on a hidden CodaBench leaderboard.
 
+**Author:** Muhammad Rayhan Athaillah (賴瑞涵) | Student ID: 313540001 | NYCU
+
 ## Introduction
 
 The task ships 209 train images and 101 test images. Each training sample is a folder containing the source `image.tif` plus up to four mask files `class{1..4}.tif`, where every unique non-zero pixel value within a mask file represents one instance of that class.
@@ -106,9 +108,3 @@ Key design decisions and ablations:
 - **K-Fold CV (K=5)**: Stratified 5-fold. 31+ hours impractical; abandoned.
 - **Speed optimizations**: `persistent_workers`, `--workers 16`. (`cudnn.benchmark=True` backfired with Mask R-CNN dynamic shapes.)
 - **OOM handling**: Automatic batch-size halving on `torch.cuda.OutOfMemoryError` with global state guard.
-
-## Author
-
-Muhammad Rayhan Athaillah (賴瑞涵)  
-Student ID: 313540001  
-Affiliation: National Yang Ming Chiao Tung University (NYCU)
