@@ -128,7 +128,7 @@ A key methodological decision was to \textbf{train on all 209 images without a v
 \subsection{Model Architecture}
 
 \subsubsection{Backbone: ConvNeXt-Base}
-The primary model uses \textbf{ConvNeXt-Base} as the backbone, initialized with ImageNet-22K pretrained weights and fine-tuned at 384$\times$384 resolution\\ (\texttt{convnext\_base.fb\_in22k\_ft\_in1k\_384}). The backbone contains four stages with output channels $[128, 256, 512, 1024]$ at strides $[4, 8, 16, 32]$, totaling 88 million parameters.
+The primary model uses \textbf{ConvNeXt-Base} as the backbone, initialized with ImageNet-22K pretrained weights at 384$\times$384 resolution (\texttt{convnext\_base.in22k}). The backbone contains four stages with output channels $[128, 256, 512, 1024]$ at strides $[4, 8, 16, 32]$, totaling 88 million parameters.
 
 \subsubsection{Neck: Feature Pyramid Network}
 A \textbf{Feature Pyramid Network (FPN)} \cite{lin2017} is built on top of the ConvNeXt backbone via \texttt{BackboneWithFPN}, converting all four stage features to 256-channel outputs. A \texttt{LastLevelMaxPool} adds a fifth level (stride 64) for large-object detection.
@@ -137,7 +137,9 @@ A \textbf{Feature Pyramid Network (FPN)} \cite{lin2017} is built on top of the C
 The standard Mask R-CNN head structure is retained with class-adapted predictors:
 
 \begin{itemize}
-    \item \textbf{RPN:} Region Proposal Network with custom anchor sizes \\ \texttt{((8,), (16,), (32,), (64,), (128,))} and aspect ratios $(0.5, 1.0, 2.0)$.
+    \item \textbf{RPN:} Region Proposal Network with custom anchor sizes\\[-3pt]
+    \hspace*{1.5em}\texttt{((8,), (16,), (32,), (64,), (128,))}\\[-3pt]
+    \hspace*{1.5em}and aspect ratios $(0.5, 1.0, 2.0)$. These anchors are tuned for small cell instances.
     \item \textbf{Box Head:} \texttt{FastRCNNPredictor} producing 5-class classification (4 cell classes + background) and bounding box regression.
     \item \textbf{Mask Head:} \texttt{MaskRCNNPredictor} with 256 hidden channels, producing per-class binary masks.
 \end{itemize}
@@ -313,7 +315,7 @@ This experiment demonstrates that on extremely small datasets, the \textbf{inter
 
 % --- Experiment 7: Gradient Norm Plateau Detection ---
 \subsubsection{Experiment 7: Gradient Norm Plateau Detection for Epoch Selection}
-\textbf{Hypothesis:} Without a validation set ($\texttt{val\_frac}=0.0$), an automated signal is needed to select the best training epoch. The gradient norm (computed via\\ \texttt{clip\_grad\_norm\_}) could serve as a convergence indicator: when the EMA-smoothed gradient norm stabilizes (relative change $<3\%$ over a 10-epoch window), the model has converged.
+\textbf{Hypothesis:} Without a validation set ($\texttt{val\_frac}=0.0$), an automated signal is needed to select the best training epoch. The gradient norm (computed via \texttt{clip\_grad\_norm\_}) could serve as a convergence indicator: when the EMA-smoothed gradient norm stabilizes (relative change $<3\%$ over a 10-epoch window), the model has converged.
 
 \textbf{Results:} This approach failed for this specific training setup. The gradient norm decreased continuously from $\sim$125 at epoch 1 to $\sim$7 at epoch 150, never stabilizing within 3\% over 10 epochs. The model continues to fit the training data (loss drops from 30 to 0.6) while overfitting on test data past epoch 100. Since gradient flow never plateaus, gradient norm cannot serve as a convergence signal for this task. Periodic checkpoint submission proved more reliable for epoch selection.
 
